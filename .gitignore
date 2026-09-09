@@ -1,0 +1,37 @@
+
+# Ignore node_modules directory
+node_modules/
+
+# Ignore logs and other generated files
+*.log
+*.log.*
+logs/
+
+# Ignore compiled binaries
+*.class
+*.dll
+*.exe
+*.o
+*.so
+
+# Ignore package-lock.json for npm
+package-lock.json
+
+# Ignore .DS_Store files on macOS
+.DS_Store
+
+# Ignore environment-specific files
+.env
+.env.local
+.env.*.local
+
+# Ignore IDE files
+.idea/
+.vscode/
+
+# Ignore build and dist directories
+/build/
+/dist/
+
+# Ignore upload folder
+uploads/
