@@ -1,6 +1,5 @@
 "use strict";
 const { Router } = require("express");
-const { authenticate } = require("../middleWare/authMiddleware");
 const {
   getAllSeedCompanies,
   getSeedCompanyById,
@@ -10,9 +9,9 @@ const {
 
 const router = Router();
 
-router.get("/", authenticate, getAllSeedCompanies);
-router.get("/:seedCompanyId", authenticate, getSeedCompanyById);
-router.post("/", authenticate, createSeedCompany);
-router.put("/:seedCompanyId", authenticate, updateSeedCompany);
+router.get("/", getAllSeedCompanies);
+router.get("/:seedCompanyId", getSeedCompanyById);
+router.post("/", createSeedCompany);
+router.put("/:seedCompanyId", updateSeedCompany);
 
 module.exports = router;

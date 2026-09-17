@@ -1,21 +1,27 @@
 "use strict";
 const bcrypt = require("bcrypt");
 const { Employee, Role, Permission } = require("../../models");
+const { generateId } = require("../../utils/generateIds");
 
 module.exports = {
   async up(queryInterface, Sequelize) {
+    // Assumes the permissions seeder (20260908000000-seed-permissions.js) has
+    // already run. Attaches whatever permissions currently exist to Admin,
+    // so re-running this after adding new permission modules picks them up
+    // automatically — no need to edit this file when the permission list grows.
     const allPermissions = await Permission.findAll();
 
     const [adminRole] = await Role.findOrCreate({
       where: { name: "Admin" },
       defaults: {
         name: "Admin",
-        level: "L1",
         description:
           "Full system access. Every permission is enabled by default.",
         status: "Active",
       },
     });
+    const roleId = generateId("RL", adminRole?.id);
+    await adminRole.update({ roleId });
 
     await adminRole.setPermissions(allPermissions);
 
@@ -26,14 +32,14 @@ module.exports = {
     if (existing) {
       console.log("Admin employee already exists, skipping.");
     } else {
-      const rawPassword = process.env.ADMIN_SEED_PASSWORD || "ChangeMe@123";
+      const rawPassword = process.env.ADMIN_SEED_PASSWORD || "password";
       const passwordHash = await bcrypt.hash(rawPassword, 10);
 
       await Employee.create({
         empId: "EMP-0001",
         name: "Super Admin",
         number: "9999999999",
-        email: "admin@germitech.com",
+        email: "admin@gmail.com",
         password: passwordHash,
         level: "L1",
         roleId: adminRole.id,

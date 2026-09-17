@@ -26,7 +26,6 @@ async function authenticate(req, res, next) {
         .status(403)
         .json({ message: "Your account is Inactive. Contact an admin." });
     }
-
     req.employee = {
       id: employee.id,
       name: employee.name,

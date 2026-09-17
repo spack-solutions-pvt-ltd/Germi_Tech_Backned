@@ -1,6 +1,7 @@
 const express = require("express");
 const cors = require("cors");
 const helmet = require("helmet");
+const path = require("path");
 require("dotenv").config();
 const { corsList } = require("./src/constants/cors");
 const errorMiddleware = require("./src/middleWare/error.middleware");
@@ -24,6 +25,9 @@ app.use(
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
+// file uploads
+app.use("/uploads", express.static(path.join(__dirname, "src", "uploads")));
+
 // Main Routes
 app.use("/v1/admin", adminRoutes);
 
@@ -40,7 +44,6 @@ const startServer = async () => {
     });
   } catch (error) {
     console.error("Database connection failed:", error);
-    
   }
 };
 

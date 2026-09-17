@@ -16,14 +16,13 @@ module.exports = (sequelize, DataTypes) => {
       effect: {
         type: DataTypes.ENUM("grant", "revoke"),
         allowNull: false,
-        defaultValue: "grant",
-      },
+        defaultValue: "grant",      },
     },
     {
       sequelize,
       modelName: "IndividualPermission",
       indexes: [{ unique: true, fields: ["employeeId", "permissionId"] }],
-    }
+    },
   );
 
   return IndividualPermission;

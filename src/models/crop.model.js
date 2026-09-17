@@ -4,7 +4,14 @@ const { Model } = require("sequelize");
 module.exports = (sequelize, DataTypes) => {
   class Crop extends Model {
     static associate(models) {
-      //   this.hasMany(models.CompanyCrop, { foreignKey: "cropId", as: "companyCrops" });
+      this.hasMany(models.CompanyCrop, {
+        foreignKey: "cropId",
+        as: "companyCrops",
+      });
+      this.hasMany(models.LaborGroupCropRate, {
+        foreignKey: "cropId",
+        as: "laborGroupRates",
+      });
     }
   }
 

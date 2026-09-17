@@ -1,5 +1,5 @@
 "use strict";
-const generateId = require("../utils/generateIds");
+const { generateId } = require("../utils/generateIds");
 const { Crop } = require("../models");
 const {
   createCropSchema,
@@ -8,11 +8,57 @@ const {
 
 async function getAllCrops(req, res, next) {
   try {
-    const crops = await Crop.findAll({ order: [["name", "ASC"]] });
-    res.json({
+    const { page, limit } = req.query;
+
+    // No pagination parameters → return all crops
+    if (page === undefined && limit === undefined) {
+      const crops = await Crop.findAll({
+        attributes: ["id", "name"],
+        order: [["createdAt", "DESC"]],
+      });
+
+      return res.status(200).json({
+        success: true,
+        message: "Crops fetched successfully",
+        data: crops,
+      });
+    }
+
+    // Pagination parameters provided
+    const pageNumber = Number(page);
+    const limitNumber = Number(limit);
+
+    // Validate pagination values
+    if (
+      !Number.isInteger(pageNumber) ||
+      !Number.isInteger(limitNumber) ||
+      pageNumber < 1 ||
+      limitNumber < 1
+    ) {
+      return res.status(400).json({
+        success: false,
+        message: "page and limit must be positive integers",
+      });
+    }
+
+    const offset = (pageNumber - 1) * limitNumber;
+
+    const { count, rows } = await Crop.findAndCountAll({
+      limit: limitNumber,
+      offset,
+      order: [["createdAt", "DESC"]],
+    });
+
+    return res.status(200).json({
       success: true,
       message: "Crops fetched successfully",
-      data: crops,
+      data: rows,
+      pagination: {
+        total: count,
+        page: pageNumber,
+        limit: limitNumber,
+        totalPages: Math.ceil(count / limitNumber),
+      },
     });
   } catch (err) {
     next(err);

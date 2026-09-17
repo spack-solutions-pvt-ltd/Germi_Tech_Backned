@@ -8,6 +8,7 @@ module.exports = (sequelize, DataTypes) => {
       this.belongsToMany(models.Permission, {
         through: models.RolePermission,
         foreignKey: "roleId",
+        otherKey: "permissionId",
         as: "permissions",
       });
     }
@@ -15,8 +16,8 @@ module.exports = (sequelize, DataTypes) => {
 
   Role.init(
     {
-      name: DataTypes.STRING,
-      level: DataTypes.ENUM("L1", "L2", "L3"),
+      roleId: DataTypes.STRING,
+      name: { type: DataTypes.STRING, unique: true },
       description: DataTypes.STRING,
       status: {
         type: DataTypes.ENUM("Active", "Inactive"),

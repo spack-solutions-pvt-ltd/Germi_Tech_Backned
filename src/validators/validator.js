@@ -12,7 +12,7 @@ const createSeedCompanySchema = z.object({
   district: z.string().max(100).optional(),
   pincode: z.string().max(10).optional(),
   state: z.string().max(100).optional(),
-  status: z.enum(["active", "inactive"]).optional(),
+  status: z.enum(["Active", "Inactive"]).optional(),
 });
 
 const updateSeedCompanySchema = createSeedCompanySchema.partial();

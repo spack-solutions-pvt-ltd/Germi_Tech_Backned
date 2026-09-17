@@ -27,10 +27,10 @@ module.exports = (sequelize, DataTypes) => {
 
   Permission.init(
     {
-      module: DataTypes.STRING, // e.g. 'payments'
-      action: DataTypes.STRING, // e.g. 'make'
-      code: DataTypes.STRING, // e.g. 'payments.make' — unique, used in permission checks
-      name: DataTypes.STRING, // display name, e.g. 'Make Payments'
+      module: DataTypes.STRING, 
+      action: DataTypes.STRING, 
+      code: DataTypes.STRING,
+      name: DataTypes.STRING,
       description: DataTypes.STRING,
     },
     {

@@ -1,6 +1,5 @@
 "use strict";
 const { Router } = require("express");
-const { authenticate } = require("../middleWare/authMiddleware");
 const {
   getAllCrops,
   getCropById,
@@ -10,9 +9,9 @@ const {
 
 const router = Router();
 
-router.get("/", authenticate, getAllCrops);
-router.get("/:cropId", authenticate, getCropById);
-router.post("/", authenticate, createCrop);
-router.put("/:cropId", authenticate, updateCrop);
+router.get("/", getAllCrops);
+router.get("/:cropId", getCropById);
+router.post("/", createCrop);
+router.put("/:cropId", updateCrop);
 
 module.exports = router;

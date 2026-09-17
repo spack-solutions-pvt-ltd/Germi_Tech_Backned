@@ -24,6 +24,65 @@ module.exports = (sequelize, DataTypes) => {
         foreignKey: "employeeId",
         as: "individualPermissions",
       });
+
+      this.hasMany(models.SeedCompany, {
+        foreignKey: "createdBy",
+        as: "createdSeedCompany",
+      });
+      this.hasMany(models.Village, {
+        foreignKey: "createdBy",
+        as: "createdVillage",
+      });
+      // Villages this employee is a general assigned supervisor for.
+      // this.belongsToMany(models.Village, {
+      //   through: models.VillageSupervisor,
+      //   foreignKey: "employeeId",
+      //   otherKey: "villageId",
+      //   as: "supervisedVillages",
+      // });
+
+      // Specific allotment-village rows this employee supervises.
+      this.hasMany(models.AllotmentVillage, {
+        foreignKey: "supervisorId",
+        as: "allotmentSupervisions",
+      });
+      // Sub organizers this employee created/onboarded.
+      this.hasMany(models.SubOrganizer, {
+        foreignKey: "createdBy",
+        as: "createdSubOrganizers",
+      });
+
+      // Labor groups this employee created/onboarded.
+      this.hasMany(models.LaborGroup, {
+        foreignKey: "createdBy",
+        as: "createdLaborGroups",
+      });
+      // Notifications this employee has broadcast
+      this.hasMany(models.Notification, {
+        foreignKey: "sentBy",
+        as: "sentNotifications",
+      });
+      this.hasMany(models.NotificationResponse, {
+        foreignKey: "respondedBy",
+        as: "notificationResponses",
+      });
+      // Task management — independent module, only ever touches Employee.
+      this.hasMany(models.Task, {
+        foreignKey: "assignedBy",
+        as: "tasksCreated",
+      });
+      this.hasMany(models.Task, {
+        foreignKey: "assignedTo",
+        as: "tasksAssigned",
+      });
+      this.hasMany(models.Task, {
+        foreignKey: "approvedBy",
+        as: "tasksApproved",
+      });
+      this.hasMany(models.TaskNote, {
+        foreignKey: "authorId",
+        as: "taskNotes",
+      });
     }
   }
 

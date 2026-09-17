@@ -1,0 +1,73 @@
+"use strict";
+module.exports = {
+  async up(queryInterface, Sequelize) {
+    const now = new Date();
+    const states = [
+      { name: "Andhra Pradesh", createdAt: now, updatedAt: now },
+      { name: "Arunachal Pradesh", createdAt: now, updatedAt: now },
+      { name: "Assam", createdAt: now, updatedAt: now },
+      { name: "Bihar", createdAt: now, updatedAt: now },
+      { name: "Chhattisgarh", createdAt: now, updatedAt: now },
+      { name: "Goa", createdAt: now, updatedAt: now },
+      { name: "Gujarat", createdAt: now, updatedAt: now },
+      { name: "Haryana", createdAt: now, updatedAt: now },
+      { name: "Himachal Pradesh", createdAt: now, updatedAt: now },
+      { name: "Jharkhand", createdAt: now, updatedAt: now },
+      { name: "Karnataka", createdAt: now, updatedAt: now },
+      { name: "Kerala", createdAt: now, updatedAt: now },
+      { name: "Madhya Pradesh", createdAt: now, updatedAt: now },
+      { name: "Maharashtra", createdAt: now, updatedAt: now },
+      { name: "Manipur", createdAt: now, updatedAt: now },
+      { name: "Meghalaya", createdAt: now, updatedAt: now },
+      { name: "Mizoram", createdAt: now, updatedAt: now },
+      { name: "Nagaland", createdAt: now, updatedAt: now },
+      { name: "Odisha", createdAt: now, updatedAt: now },
+      { name: "Punjab", createdAt: now, updatedAt: now },
+      { name: "Rajasthan", createdAt: now, updatedAt: now },
+      { name: "Sikkim", createdAt: now, updatedAt: now },
+      { name: "Tamil Nadu", createdAt: now, updatedAt: now },
+      { name: "Telangana", createdAt: now, updatedAt: now },
+      { name: "Tripura", createdAt: now, updatedAt: now },
+      { name: "Uttar Pradesh", createdAt: now, updatedAt: now },
+      { name: "Uttarakhand", createdAt: now, updatedAt: now },
+      { name: "West Bengal", createdAt: now, updatedAt: now },
+    ];
+    await queryInterface.bulkInsert("States", states);
+  },
+  async down(queryInterface, Sequelize) {
+    await queryInterface.bulkDelete("States", {
+      name: {
+        [Sequelize.Op.in]: [
+          "Andhra Pradesh",
+          "Arunachal Pradesh",
+          "Assam",
+          "Bihar",
+          "Chhattisgarh",
+          "Goa",
+          "Gujarat",
+          "Haryana",
+          "Himachal Pradesh",
+          "Jharkhand",
+          "Karnataka",
+          "Kerala",
+          "Madhya Pradesh",
+          "Maharashtra",
+          "Manipur",
+          "Meghalaya",
+          "Mizoram",
+          "Nagaland",
+          "Odisha",
+          "Punjab",
+          "Rajasthan",
+          "Sikkim",
+          "Tamil Nadu",
+          "Telangana",
+          "Tripura",
+          "Uttar Pradesh",
+          "Uttarakhand",
+          "West Bengal",
+        ],
+      },
+    });
+  },
+};

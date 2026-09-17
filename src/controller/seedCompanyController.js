@@ -1,103 +1,189 @@
 "use strict";
-const generateId = require("../utils/generateIds");
-const { SeedCompany } = require("../models");
+const { Op } = require("sequelize");
 const {
-  createSeedCompanySchema,
-  updateSeedCompanySchema,
-} = require("../validators/validator");
+  SeedCompany,
+  Warehouse,
+  CompanyCrop,
+  Crop,
+  Employee,
+  State,
+} = require("../models");
+const {
+  getPagination,
+  buildPaginatedResponse,
+} = require("../utils/pagination");
+const { success, error } = require("../utils/response");
+const { generateId } = require("../utils/generateIds");
 
-async function getAllSeedCompanies(req, res, next) {
+/** GET /api/seed-companies?search=agro&page=1&limit=20 */
+const getAllSeedCompanies = async (req, res, next) => {
   try {
-    const seedCompanies = await SeedCompany.findAll();
-    res.json({
-      success: true,
-      message: "seed Companies fetched successfully",
-      data: seedCompanies,
+    const { search } = req.query;
+    const { page, limit, offset } = getPagination(req.query);
+
+    const where = {};
+    if (search) {
+      const term = `%${search.trim()}%`;
+      where[Op.or] = [
+        { name: { [Op.like]: term } },
+        { companyId: { [Op.like]: term } },
+      ];
+    }
+
+    const result = await SeedCompany.findAndCountAll({
+      where,
+      include: [
+        {
+          model: Employee,
+          as: "creator",
+          attributes: ["id", "empId", "name"],
+        },
+        {
+          model: State,
+          as: "state",
+          attributes: ["id", "name"],
+        },
+      ],
+      limit,
+      offset,
+      order: [["createdAt", "DESC"]],
     });
+
+    return success(
+      res,
+      200,
+      "Seed companies fetched successfully",
+      buildPaginatedResponse(result, page, limit),
+    );
   } catch (err) {
     next(err);
   }
-}
+};
 
-async function getSeedCompanyById(req, res) {
+/** GET /api/seed-companies/:seedCompanyId */
+const getSeedCompanyById = async (req, res, next) => {
   try {
     const { seedCompanyId } = req.params;
     if (!seedCompanyId) {
-      res.status(401).json({
-        success: false,
-        message: "seedCompanyId is required",
-      });
+      return error(res, 400, "seedCompanyId is required");
     }
-    const seedCompany = await SeedCompany.findByPk(seedCompanyId);
-    if (!seedCompany)
-      return res
-        .status(404)
-        .json({ success: false, message: "SeedCompany not found" });
-    res.status(200).json({
-      success: true,
-      message: "SeedCompany fetched",
-      data: seedCompany,
+
+    const company = await SeedCompany.findByPk(seedCompanyId, {
+      include: [
+        { model: Warehouse, as: "warehouses" },
+        {
+          model: CompanyCrop,
+          as: "companyCrops",
+          include: { model: Crop, as: "crop" },
+        },
+        {
+          model: Employee,
+          as: "creator",
+          attributes: ["id", "empId", "name"],
+        },
+        {
+          model: State,
+          as: "state",
+          attributes: ["id", "name"],
+        },
+      ],
+    });
+
+    if (!company) {
+      return error(res, 404, "Seed company not found");
+    }
+
+    return success(res, 200, "Seed company fetched successfully", {
+      data: company,
     });
   } catch (err) {
     next(err);
   }
-}
+};
 
-async function createSeedCompany(req, res, next) {
-  const parsed = createSeedCompanySchema.safeParse(req.body);
-  if (!parsed.success) {
-    return res.status(422).json({
-      success: false,
-      message: "Validation failed",
-      errors: parsed.error.flatten(),
-    });
-  }
-
+/** POST /api/seed-companies */
+const createSeedCompany = async (req, res, next) => {
   try {
-    const crop = await SeedCompany.create(parsed.data);
-    const cropId = generateId("CR", crop.id);
-    await crop.update({ cropId });
-    res.status(201).json({
-      success: true,
-      message: "SeedCompany created",
-      data: crop,
+    const {
+      name,
+      number,
+      email,
+      pocName,
+      pocNumber,
+      fullAddress,
+      district,
+      pincode,
+      stateId,
+      status,
+    } = req.body;
+    const employee = req.employee;
+    const company = await SeedCompany.create({
+      name,
+      number,
+      email,
+      pocName,
+      pocNumber,
+      fullAddress,
+      district,
+      pincode,
+      stateId,
+      status: status || "Active",
+      createdBy: employee.id,
+    });
+
+    const companyId = generateId("SC", company?.id);
+    await company.update({ companyId });
+
+    return success(res, 201, "Seed company created successfully", {
+      data: company,
     });
   } catch (err) {
     next(err);
   }
-}
+};
 
-async function updateSeedCompany(req, res) {
-  const parsed = updateSeedCompanySchema.safeParse(req.body);
-  if (!parsed.success) {
-    return res
-      .status(422)
-      .json({ message: "Validation failed", errors: parsed.error.flatten() });
-  }
-
+/** PUT/PATCH /api/seed-companies/:id */
+const updateSeedCompany = async (req, res, next) => {
   try {
     const { seedCompanyId } = req.params;
-    const seedCompany = await SeedCompany.findByPk(seedCompanyId);
-    if (!seedCompany)
-      return res.status(404).json({ message: "SeedCompany not found" });
+    if (!seedCompanyId) return error(res, 400, "seedCompanyId is required");
 
-    await seedCompany.update(parsed.data);
-    res.json({
-      success: true,
-      message: "SeedCompany updated!",
-      data: seedCompany,
+    const company = await SeedCompany.findByPk(seedCompanyId);
+    if (!company) return error(res, 404, "Seed company not found");
+
+    const {
+      name,
+      number,
+      email,
+      pocName,
+      pocNumber,
+      fullAddress,
+      district,
+      pincode,
+      stateId,
+      status,
+    } = req.body;
+
+    await company.update({
+      name,
+      number,
+      email,
+      pocName,
+      pocNumber,
+      fullAddress,
+      district,
+      pincode,
+      stateId,
+      status,
+    });
+
+    return success(res, 200, "Seed company updated successfully", {
+      data: company,
     });
   } catch (err) {
-    if (err.name === "SequelizeUniqueConstraintError") {
-      return res
-        .status(409)
-        .json({ message: "A seedCompany with this name already exists" });
-    }
-    res
-      .status(400)
-      .json({ message: "Failed to update crop", error: err.message });
+    next(err);
   }
-}
+};
 
 module.exports = {
   getAllSeedCompanies,

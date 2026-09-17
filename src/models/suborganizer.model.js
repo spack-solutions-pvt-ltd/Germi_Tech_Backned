@@ -12,25 +12,20 @@ module.exports = (sequelize, DataTypes) => {
         foreignKey: "createdBy",
         as: "creator",
       });
-      //   this.hasMany(models.AllotmentVillage, {
-      //     foreignKey: "subOrganizerId",
-      //     as: "allotmentVillages",
-      //   });
+      this.hasMany(models.AllotmentVillage, {
+        foreignKey: "subOrganizerId",
+        as: "allotmentVillages",
+      });
     }
   }
 
   SubOrganizer.init(
     {
-      subOrganizerId: {
-        type: DataTypes.STRING(30),
-        allowNull: false,
-        unique: true,
-      },
+      subOrganizerId: DataTypes.STRING(30),
       villageId: DataTypes.INTEGER,
       name: DataTypes.STRING(150),
       number: DataTypes.STRING(15),
       acres: DataTypes.DECIMAL(10, 2),
-      activeTill: DataTypes.DATEONLY,
       createdBy: DataTypes.INTEGER,
       status: {
         type: DataTypes.ENUM("Active", "Inactive"),

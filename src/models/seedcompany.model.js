@@ -14,10 +14,15 @@ module.exports = (sequelize, DataTypes) => {
         as: "companyCrops",
         onDelete: "CASCADE",
       });
-      //   this.hasMany(models.Allotment, {
-      //     foreignKey: "companyId",
-      //     as: "allotments",
-      //   });
+      this.belongsTo(models.Employee, {
+        foreignKey: "createdBy",
+        as: "creator",
+      });
+      this.belongsTo(models.State, { foreignKey: "stateId", as: "state" });
+      this.hasMany(models.Allotment, {
+        foreignKey: "companyId",
+        as: "allotments",
+      });
     }
   }
 
@@ -32,12 +37,13 @@ module.exports = (sequelize, DataTypes) => {
       fullAddress: DataTypes.STRING(500),
       district: DataTypes.STRING(100),
       pincode: DataTypes.STRING(10),
-      state: DataTypes.STRING(100),
+      stateId: DataTypes.INTEGER,
       status: {
         type: DataTypes.ENUM("Active", "Inactive"),
         allowNull: false,
         defaultValue: "Active",
       },
+      createdBy: DataTypes.INTEGER,
     },
     {
       sequelize,

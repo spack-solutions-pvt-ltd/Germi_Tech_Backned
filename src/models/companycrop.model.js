@@ -11,7 +11,10 @@ module.exports = (sequelize, DataTypes) => {
         as: "company",
       });
       this.belongsTo(models.Crop, { foreignKey: "cropId", as: "crop" });
-      //   this.hasMany(models.Allotment, { foreignKey: "companyCropId", as: "allotments" });
+      this.hasMany(models.Allotment, {
+        foreignKey: "companyCropId",
+        as: "allotments",
+      });
     }
   }
 

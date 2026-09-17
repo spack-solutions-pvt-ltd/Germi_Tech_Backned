@@ -1,116 +1,146 @@
 "use strict";
 
-// One entry per module, listing the actions that module supports.
-// Mirrors the checkboxes on the "Create Role" page in Figma.
 const PERMISSION_MODULES = [
   {
     module: "seed_company_management",
     label: "Seed Company Management",
     actions: [
-      { action: "view", name: "View Seed Companies" },
-      { action: "add_edit", name: "Add / Edit Seed Companies" },
+      { action: "view", name: "View" },
+      { action: "add", name: "Add" },
+      { action: "edit", name: "Edit" },
     ],
   },
   {
     module: "crop_management",
     label: "Crop Management",
     actions: [
-      { action: "view", name: "View Crops" },
-      { action: "add_edit", name: "Add / Edit Crops" },
+      { action: "view", name: "View" },
+      { action: "add", name: "Add" },
+      { action: "edit", name: "Edit" },
     ],
   },
   {
     module: "village_management",
     label: "Village Management",
     actions: [
-      { action: "view", name: "View Villages" },
-      { action: "add_edit", name: "Add / Edit Villages" },
+      { action: "view", name: "View" },
+      { action: "add", name: "Add" },
+      { action: "edit", name: "Edit" },
     ],
   },
   {
     module: "sub_organizer_management",
     label: "Sub Organizer Management",
     actions: [
-      { action: "view", name: "View Sub Organizers" },
-      { action: "add_edit", name: "Add / Edit Sub Organizers" },
+      { action: "view", name: "View" },
+      { action: "add", name: "Add" },
+      { action: "edit", name: "Edit" },
     ],
   },
   {
     module: "logistics_management",
     label: "Logistics Management",
     actions: [
-      { action: "view", name: "View Logistics" },
-      { action: "add_edit", name: "Add / Edit Logistics" },
+      { action: "view", name: "View" },
+      { action: "add", name: "Add" },
+      { action: "edit", name: "Edit" },
+    ],
+  },
+  {
+    module: "labour_groups",
+    label: "Labour Groups Management",
+    actions: [
+      { action: "view", name: "View" },
+      { action: "add", name: "Add" },
+      { action: "edit", name: "Edit" },
     ],
   },
   {
     module: "allotment_management",
     label: "Allotment Management",
     actions: [
-      { action: "view", name: "View Allotments" },
-      { action: "add_edit", name: "Add / Edit Allotments" },
+      { action: "view", name: "View" },
+      { action: "add", name: "Add" },
+      { action: "edit", name: "Edit" },
+      { action: "delete", name: "Delete" },
     ],
   },
   {
     module: "task_management",
     label: "Task Management",
     actions: [
-      { action: "view", name: "View Tasks" },
-      { action: "add_edit", name: "Add / Edit Tasks" },
+      { action: "global_view", name: "Global View" },
+      { action: "add", name: "Add" },
+      { action: "edit", name: "Edit" },
+      { action: "tast_type", name: "Task types" },
     ],
   },
   {
-    module: "l1_requests",
-    label: "L1 Requests",
+    module: "approvals",
+    label: "Approvals",
     actions: [
-      { action: "view", name: "View L1 Requests" },
-      { action: "update", name: "Update L1 Requests" },
+      { action: "view", name: "View" },
+      { action: "edit", name: "Edit" },
     ],
   },
   {
-    module: "l2_requests",
-    label: "L2 Requests",
+    module: "verifications",
+    label: "Verifications",
     actions: [
-      { action: "view", name: "View L2 Requests" },
-      { action: "update", name: "Update L2 Requests" },
+      { action: "view", name: "View" },
+      { action: "edit", name: "Edit" },
+    ],
+  },
+  {
+    module: "requests",
+    label: "Requests",
+    actions: [
+      { action: "view", name: "View" },
+      { action: "add", name: "Add" },
+      { action: "edit", name: "Edit" },
     ],
   },
   {
     module: "payments",
     label: "Payments",
     actions: [
-      { action: "view", name: "View Payments" },
-      { action: "make", name: "Make Payments" },
-      { action: "edit", name: "Edit / Update Payments" },
+      { action: "view", name: "View" },
+      { action: "edit", name: "Edit" },
     ],
   },
   {
-    module: "task_types_management",
-    label: "Task Types Management",
+    module: "reports",
+    label: "Reports",
     actions: [
-      { action: "view", name: "View Task Types" },
-      { action: "add_edit", name: "Add / Edit Task Types" },
+      { action: "view", name: "View" },
+      { action: "download", name: "Download" },
     ],
   },
   {
-    module: "entries_management",
-    label: "Entries (Field Submissions)",
+    module: "notification_management",
+    label: "Notification Management",
     actions: [
-      // Covers Labor entry, Exp Request, Bags Request, Bags Shared,
-      // Vehicle Request, Loading Entry, Bags Return entry as one module —
-      // split into per-type modules later if you need finer-grained control.
-      { action: "view", name: "View Entries" },
-      { action: "create", name: "Create Entries" },
+      { action: "view", name: "View" },
+      { action: "add", name: "Add" },
+      { action: "edit", name: "Edit" },
     ],
   },
   {
-    module: "entries_approval",
-    label: "Entries Approval",
+    module: "employee",
+    label: "Employees",
     actions: [
-      // L2 reviewing/forwarding entries to L1, and the L3 "Approval Entry
-      // for Bags" step, both live here.
-      { action: "view", name: "View Pending Entries" },
-      { action: "approve", name: "Approve / Forward Entries" },
+      { action: "view", name: "View" },
+      { action: "add", name: "Add" },
+      { action: "edit", name: "Edit" },
+    ],
+  },
+  {
+    module: "role_management",
+    label: "Role Management",
+    actions: [
+      { action: "view", name: "View" },
+      { action: "add", name: "Add" },
+      { action: "edit", name: "Edit" },
     ],
   },
 ];
