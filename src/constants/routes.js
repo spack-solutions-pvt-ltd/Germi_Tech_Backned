@@ -1,7 +1,8 @@
 const authRoutes = {
   login: "/login",
-  signup: "/signup",
   forgotPassword: "/forgot-password",
+  verifyOtp: "/verify-otp",
+  resendOtp:"/resend-otp",
   resetPassword: "/reset-password",
   getDetails: "/me",
   changePassword: "/change-password",
@@ -24,7 +25,7 @@ const indexRoutes = {
   taskType: "/task-types",
   tasks: "/tasks",
   allotment: "/allotments",
-  permissions:"/permissions"
+  permissions: "/permissions",
 };
 
 module.exports = {

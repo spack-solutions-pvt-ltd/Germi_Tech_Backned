@@ -15,6 +15,7 @@ const {
 } = require("../utils/pagination");
 const { success, error } = require("../utils/response");
 const { generateId } = require("../utils/generateIds");
+const {welcomeEmailTemplate} = require("../templates/welcomeEmail")
 
 
 // 

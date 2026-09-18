@@ -1,6 +1,6 @@
 "use strict";
 const jwt = require("jsonwebtoken");
-const { Employee } = require("../models");
+const { Employee, IndividualPermission, Permission } = require("../models");
 
 const JWT_SECRET = process.env.JWT_SECRET;
 
@@ -44,6 +44,48 @@ async function authenticate(req, res, next) {
   }
 }
 
+async function getEffectivePermissionCodes(employeeId, rolePermissions = []) {
+  const overrides = await IndividualPermission.findAll({
+    where: { employeeId },
+    include: { model: Permission },
+  });
+
+  const codes = new Set(rolePermissions.map((p) => p.code));
+
+  overrides
+    .filter((o) => o.effect === "grant")
+    .forEach((o) => codes.add(o.Permission.code));
+  overrides
+    .filter((o) => o.effect === "revoke")
+    .forEach((o) => codes.delete(o.Permission.code));
+
+  return codes;
+}
+function requirePermission(code) {
+  return async (req, res, next) => {
+    if (!req.employee) return error(res, 401, "Authentication required");
+
+    try {
+      const rolePermissions = req.employee.role
+        ? req.employee.role.permissions
+        : [];
+      const effectiveCodes = await getEffectivePermissionCodes(
+        req.employee.id,
+        rolePermissions,
+      );
+
+      if (!effectiveCodes.has(code)) {
+        return error(res, 403, "You don't have permission to do this");
+      }
+
+      next();
+    } catch (err) {
+      next(err);
+    }
+  };
+}
 module.exports = {
   authenticate,
+  getEffectivePermissionCodes,
+  requirePermission,
 };

@@ -43,6 +43,7 @@ module.exports = (sequelize, DataTypes) => {
         type: DataTypes.ENUM(
           "Pending",
           "Approval",
+          "Reassigned",
           "Completed",
           "Overdue",
           "Cancelled",

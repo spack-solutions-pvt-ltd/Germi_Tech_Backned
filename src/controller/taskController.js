@@ -5,15 +5,18 @@ const {
   TaskNote,
   TaskType,
   Employee,
-  Permission,
   Role,
+  Permission,
 } = require("../models");
 const {
   getPagination,
   buildPaginatedResponse,
 } = require("../utils/pagination");
-const { success, error } = require("../utils/response");
 const { generateId } = require("../utils/generateIds");
+const {
+  getEffectivePermissionCodes,
+} = require("../middleWare/auth.middleware");
+const { success, error } = require("../utils/response");
 
 const TASK_INCLUDES = [
   {
@@ -34,46 +37,115 @@ const TASK_INCLUDES = [
   { model: TaskType, as: "taskType", attributes: ["id", "name"] },
 ];
 
-function getTodayRange() {
-  const start = new Date();
-  start.setHours(0, 0, 0, 0);
-  const end = new Date();
-  end.setHours(23, 59, 59, 999);
-  return [start, end];
-}
-
-/**
- * Lazily flips any Pending task whose due date has passed into Overdue.
- * Runs at the top of every list/detail read — there's no scheduled job
- * doing this in the background yet, so a task only becomes visibly
- * "Overdue" the next time someone loads it. Fine for an admin console;
- * swap for a real cron if you need it to update in real time.
- */
-const markOverdueTasks = async () => {
+// To set the tasks into overdue
+async function markOverdueTasks() {
   await Task.update(
     { status: "Overdue" },
     { where: { status: "Pending", dueDate: { [Op.lt]: new Date() } } },
   );
+}
+
+/**
+ * The Global Task List's 4 cards: Open tasks / Pending approval / Completed
+ * / Total tasks. "Open" and "Pending approval" are mutually exclusive
+ * (Pending only vs Approval only) — they don't overlap with each other, and
+ * neither counts Overdue/Cancelled tasks individually, but "Total tasks"
+ * counts everything regardless of status, so the four numbers won't always
+ * sum evenly if there are Overdue/Cancelled tasks in the mix.
+ *
+ * baseWhere lets the cards be scoped the same way as the list itself —
+ * e.g. { assignedBy: employeeId } for someone without global_view, so the
+ * numbers on the cards always match what's actually in the table below them.
+ */
+async function getTaskSummary(baseWhere = {}) {
+  const [openTasks, pendingApproval, completed, totalTasks] = await Promise.all(
+    [
+      Task.count({ where: { ...baseWhere, status: "Pending" } }),
+      Task.count({ where: { ...baseWhere, status: "Approval" } }),
+      Task.count({ where: { ...baseWhere, status: "Completed" } }),
+      Task.count({ where: baseWhere }),
+    ],
+  );
+
+  return { openTasks, pendingApproval, completed, totalTasks };
+}
+
+/**
+ * Flattens a task into one chronological, chat-ready thread: the initial
+ * assignment (Task.description, authored by whoever assigned it) followed
+ * by every TaskNote in order (submissions, reassignments, cancellation) —
+ * however many times it's been reassigned and resubmitted. The frontend
+ * renders this as a single message list; it doesn't need to separately
+ * reason about `description` vs `notes` or reconstruct the ordering itself.
+ */
+function buildTaskConversation(task) {
+  const conversation = [
+    {
+      type: "description",
+      author: task.assignedByEmployee
+        ? {
+            id: task.assignedByEmployee.id,
+            empId: task.assignedByEmployee.empId,
+            name: task.assignedByEmployee.name,
+            level: task.assignedByEmployee.level,
+          }
+        : null,
+      message: task.description,
+      createdAt: task.assignedDate || task.createdAt,
+    },
+  ];
+
+  (task.notes || []).forEach((note) => {
+    conversation.push({
+      type: note.noteType, // "submission" | "reassign" | "cancel"
+      author: note.author
+        ? {
+            id: note.author.id,
+            empId: note.author.empId,
+            name: note.author.name,
+            level: note.author.level,
+          }
+        : null,
+      message: note.message,
+      createdAt: note.createdAt,
+    });
+  });
+
+  return conversation;
+}
+
+/**
+ * The TaskNote include used everywhere the chat thread is needed — kept in
+ * one place so getTaskById and updateTaskStatus can't drift apart.
+ */
+const TASK_NOTES_INCLUDE = {
+  model: TaskNote,
+  as: "notes",
+  include: [
+    {
+      model: Employee,
+      as: "author",
+      attributes: ["id", "empId", "name", "level"],
+    },
+  ],
+  separate: true,
+  order: [["createdAt", "ASC"]],
 };
 
-const getTaskSummary = async () => {
-  const [todayStart, todayEnd] = getTodayRange();
+/**
+ * Attaches the ready-to-render `conversation` array to a task's JSON,
+ * without dropping the raw `description`/`notes` fields — some frontend
+ * consumers may still want those directly.
+ */
+function withConversation(task) {
+  return { ...task.toJSON(), conversation: buildTaskConversation(task) };
+}
 
-  const [openTasks, dueToday, completed, overdue] = await Promise.all([
-    Task.count({ where: { status: { [Op.in]: ["Pending", "Approval"] } } }),
-    Task.count({
-      where: {
-        dueDate: { [Op.between]: [todayStart, todayEnd] },
-        status: { [Op.notIn]: ["Completed", "Cancelled"] },
-      },
-    }),
-    Task.count({ where: { status: "Completed" } }),
-    Task.count({ where: { status: "Overdue" } }),
-  ]);
-
-  return { openTasks, dueToday, completed, overdue };
-};
-
+/**
+ * The My Tasks page's 4 cards: Pending tasks / Over due / Reassigned / Completed.
+ * Different shape from getTaskSummary (the Global Task List's cards) —
+ * "Reassigned" has no equivalent there, and there's no "due today" card here.
+ */
 async function getMyTaskSummary(employeeId) {
   const base = { assignedTo: employeeId };
 
@@ -90,12 +162,10 @@ async function getMyTaskSummary(employeeId) {
 }
 
 /**
- * GET /api/tasks/my-tasks
+ * GET /api/tasks/my-tasks?search=&status=&taskTypeId=&page=&limit=
  */
 async function getMyTasks(req, res, next) {
   try {
-    if (!req.employee) return error(res, 401, "Authentication required");
-
     await markOverdueTasks();
 
     const { search, status, taskTypeId } = req.query;
@@ -111,7 +181,7 @@ async function getMyTasks(req, res, next) {
     if (status) where.status = status;
     if (taskTypeId) where.taskTypeId = taskTypeId;
 
-    const [result, summary] = await Promise.all([
+    const [result, kpis] = await Promise.all([
       Task.findAndCountAll({
         where,
         include: TASK_INCLUDES,
@@ -124,17 +194,36 @@ async function getMyTasks(req, res, next) {
 
     return success(res, 200, "My tasks fetched successfully", {
       ...buildPaginatedResponse(result, page, limit),
-      summary,
+      kpis,
     });
   } catch (err) {
     next(err);
   }
 }
 
-/** GET /api/tasks?search=TK-33&status=Pending&assignedBy=2&assignedTo=5&taskTypeId=1&page=1&limit=20 */
-const getAllTasks = async (req, res, next) => {
+/** GET /api/tasks?search=&status=&assignedBy=&assignedTo=&taskTypeId=&page=&limit= */
+async function getAllTasks(req, res, next) {
   try {
     await markOverdueTasks();
+
+    // Same permission rule as updateTask, fetched fresh for the same
+    const employeeWithPermissions = await Employee.findByPk(req.employee.id, {
+      include: {
+        model: Role,
+        as: "role",
+        include: { model: Permission, as: "permissions" },
+      },
+    });
+    if (!employeeWithPermissions) return error(res, 404, "Employee not found");
+
+    const rolePermissions = employeeWithPermissions.role
+      ? employeeWithPermissions.role.permissions
+      : [];
+    const effectiveCodes = await getEffectivePermissionCodes(
+      req.employee.id,
+      rolePermissions,
+    );
+    const hasGlobalView = effectiveCodes.has("task_management.global_view");
 
     const { search, status, assignedBy, assignedTo, taskTypeId } = req.query;
     const { page, limit, offset } = getPagination(req.query);
@@ -142,16 +231,22 @@ const getAllTasks = async (req, res, next) => {
     const where = {};
     if (search) {
       where[Op.or] = [
-        { taskId: { [Op.like]: `%${search}%` } },
+        { taskCode: { [Op.like]: `%${search}%` } },
         { description: { [Op.like]: `%${search}%` } },
       ];
     }
     if (status) where.status = status;
-    if (assignedBy) where.assignedBy = assignedBy;
     if (assignedTo) where.assignedTo = assignedTo;
     if (taskTypeId) where.taskTypeId = taskTypeId;
 
-    const [result, summary] = await Promise.all([
+    if (hasGlobalView) {
+      // Full visibility — assignedBy is just an optional filter here.
+      if (assignedBy) where.assignedBy = assignedBy;
+    } else {
+      where.assignedBy = req.employee.id;
+    }
+
+    const [result, kpis] = await Promise.all([
       Task.findAndCountAll({
         where,
         include: TASK_INCLUDES,
@@ -159,20 +254,20 @@ const getAllTasks = async (req, res, next) => {
         limit,
         offset,
       }),
-      getTaskSummary(),
+      getTaskSummary(hasGlobalView ? {} : { assignedBy: req.employee.id }),
     ]);
 
     return success(res, 200, "Tasks fetched successfully", {
       ...buildPaginatedResponse(result, page, limit),
-      summary,
+      kpis,
     });
   } catch (err) {
     next(err);
   }
-};
+}
 
-/** GET /api/tasks/:id — full detail + the reassign/reply note thread */
-const getTaskById = async (req, res, next) => {
+/** GET /api/tasks/:id */
+async function getTaskById(req, res, next) {
   try {
     const { id } = req.params;
     if (!id) return error(res, 400, "id is required");
@@ -180,40 +275,24 @@ const getTaskById = async (req, res, next) => {
     await markOverdueTasks();
 
     const task = await Task.findByPk(id, {
-      include: [
-        ...TASK_INCLUDES,
-        {
-          model: TaskNote,
-          as: "notes",
-          include: [
-            {
-              model: Employee,
-              as: "author",
-              attributes: ["id", "empId", "name", "level"],
-            },
-          ],
-          separate: true,
-          order: [["createdAt", "ASC"]],
-        },
-      ],
+      include: [...TASK_INCLUDES, TASK_NOTES_INCLUDE],
     });
 
     if (!task) return error(res, 404, "Task not found");
 
-    return success(res, 200, "Task fetched successfully", { data: task });
+    return success(res, 200, "Task fetched successfully", {
+      data: withConversation(task),
+    });
   } catch (err) {
     next(err);
   }
-};
+}
 
-// Create the new task
-const createTask = async (req, res, next) => {
+/**
+ * POST /api/tasks
+ */
+async function createTask(req, res, next) {
   try {
-    if (!req.employee) return error(res, 401, "Authentication required");
-    if (!["L1", "L2"].includes(req.employee.level)) {
-      return error(res, 403, "Only L1 or L2 employees can create tasks");
-    }
-
     const { assignedTo, taskTypeId, description, dueDate } = req.body;
 
     if (!assignedTo) return error(res, 400, "assignedTo is required");
@@ -223,9 +302,6 @@ const createTask = async (req, res, next) => {
 
     const assignee = await Employee.findByPk(assignedTo);
     if (!assignee) return error(res, 404, "assignedTo employee not found");
-    // Assignee can be any level (L1, L2, or L3) — only the assigner is
-    // restricted to L1/L2. L3 employees can't create tasks, but they can
-    // certainly be assigned one, same as anyone else.
 
     const taskType = await TaskType.findByPk(taskTypeId);
     if (!taskType) return error(res, 404, "Task type not found");
@@ -239,7 +315,7 @@ const createTask = async (req, res, next) => {
       dueDate,
       status: "Pending",
     });
-    const taskId = await generateId("TK", task?.id);
+    const taskId = generateId("TK", task?.id);
     await task.update({ taskId });
 
     const created = await Task.findByPk(task.id, { include: TASK_INCLUDES });
@@ -248,8 +324,12 @@ const createTask = async (req, res, next) => {
   } catch (err) {
     next(err);
   }
-};
-const updateTask = async (req, res, next) => {
+}
+
+/**
+ * PUT/PATCH /api/tasks/:id
+ */
+async function updateTask(req, res, next) {
   try {
     const { id } = req.params;
     if (!id) return error(res, 400, "id is required");
@@ -257,28 +337,37 @@ const updateTask = async (req, res, next) => {
     const task = await Task.findByPk(id);
     if (!task) return error(res, 404, "Task not found");
 
-    const isCreatorOrL1 =
-      task.assignedBy === req.employee.id || req.employee.level === "L1";
-    if (!isCreatorOrL1) {
+    // to get the employee permissions
+    const employeeWithPermissions = await Employee.findByPk(req.employee.id, {
+      include: {
+        model: Role,
+        as: "role",
+        include: { model: Permission, as: "permissions" },
+      },
+    });
+    if (!employeeWithPermissions) return error(res, 404, "Employee not found");
+
+    const rolePermissions = employeeWithPermissions.role
+      ? employeeWithPermissions.role.permissions
+      : [];
+    const effectiveCodes = await getEffectivePermissionCodes(
+      req.employee.id,
+      rolePermissions,
+    );
+
+    const hasEdit = effectiveCodes.has("task_management.edit");
+    const hasGlobalView = effectiveCodes.has("task_management.global_view");
+    const isOwnTask = task.assignedBy === req.employee.id;
+
+    const canEdit = hasEdit && (isOwnTask || hasGlobalView);
+
+    if (!canEdit) {
       return error(
         res,
         403,
-        "Only the task's creator or an L1 employee can edit it",
+        "You need task_management.edit (for tasks you created) or both task_management.global_view and task_management.edit (to edit any task)",
       );
     }
-    const employee = await Employee.findByPk(req.employee.id, {
-      include: [
-        {
-          model: Role,
-          as: "role",
-          attributes: ["id"],
-          include: [
-            { model: Permission, as: "permissions", attributes: ["code"] },
-          ],
-        },
-      ],
-    });
-    console.log(employee, "employee");
 
     if (!["Pending", "Overdue"].includes(task.status)) {
       return error(
@@ -314,12 +403,12 @@ const updateTask = async (req, res, next) => {
   } catch (err) {
     next(err);
   }
-};
+}
 
 /**
- * action is one of: submit | accept | reassign | cancel
+ * PUT /api/tasks/:id/status — the single "Action" endpoint behind the side
  */
-const updateTaskStatus = async (req, res, next) => {
+async function updateTaskStatus(req, res, next) {
   try {
     const { id } = req.params;
     if (!id) return error(res, 400, "id is required");
@@ -343,7 +432,11 @@ const updateTaskStatus = async (req, res, next) => {
             "Only the assigned employee can submit this task",
           );
         }
-        if (task.status !== "Pending" && task.status !== "Overdue") {
+        if (
+          task.status !== "Pending" &&
+          task.status !== "Overdue" &&
+          task.status !== "Reassigned"
+        ) {
           return error(
             res,
             409,
@@ -383,13 +476,13 @@ const updateTaskStatus = async (req, res, next) => {
       }
 
       case "reassign": {
-        if (!isCreatorOrL1) {
-          return error(
-            res,
-            403,
-            "Only the task's creator or an L1 employee can reassign it",
-          );
-        }
+        // if (!isCreatorOrL1) {
+        //   return error(
+        //     res,
+        //     403,
+        //     "Only the task's creator or an L1 employee can reassign it",
+        //   );
+        // }
         if (!["Approval", "Pending", "Overdue"].includes(task.status)) {
           return error(
             res,
@@ -415,7 +508,7 @@ const updateTaskStatus = async (req, res, next) => {
           message: note,
         });
         await task.update({
-          status: "Pending",
+          status: "Reassigned",
           reassignCount: task.reassignCount + 1,
           ...(assignedTo !== undefined && { assignedTo }),
           ...(dueDate !== undefined && { dueDate }),
@@ -460,37 +553,22 @@ const updateTaskStatus = async (req, res, next) => {
     }
 
     const updated = await Task.findByPk(task.id, {
-      include: [
-        ...TASK_INCLUDES,
-        {
-          model: TaskNote,
-          as: "notes",
-          include: [
-            {
-              model: Employee,
-              as: "author",
-              attributes: ["id", "empId", "name", "level"],
-            },
-          ],
-          separate: true,
-          order: [["createdAt", "ASC"]],
-        },
-      ],
+      include: [...TASK_INCLUDES, TASK_NOTES_INCLUDE],
     });
 
     return success(res, 200, `Task ${action} applied successfully`, {
-      data: updated,
+      data: withConversation(updated),
     });
   } catch (err) {
     next(err);
   }
-};
+}
 
 module.exports = {
   getAllTasks,
+  getMyTasks,
   getTaskById,
   createTask,
-  updateTaskStatus,
-  getMyTasks,
   updateTask,
+  updateTaskStatus,
 };

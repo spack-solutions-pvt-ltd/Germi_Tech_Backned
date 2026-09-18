@@ -1,7 +1,8 @@
 "use strict";
-const { emailLayout } = require("./emailTemplate");
+const { emailLayout } = require("./emailLayout");
 
-function welcomeEmailTemplate({ name, empId, email, password, loginUrl }) {
+function welcomeEmailTemplate({ name, empId, email, password }) {
+  const loginUrl = process.env.FRONTEND_URL;
   const body = `
     <p>Hi ${name},</p>
     <p>Your Germitech account has been created. Here are your login details:</p>

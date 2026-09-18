@@ -1,88 +1,8 @@
-// const { Employee } = require("../models");
-// const bcrypt = require("bcrypt");
-// const { createRefreshToken } = require("../utils/refreshToken");
-// const jwt = require("jsonwebtoken");
-
-// const login = async (req, res, next) => {
-//   const { email, password } = req.body;
-//   if (!email || !password) {
-//     return res.status(422).json({ message: "Email and password are required" });
-//   }
-//   try {
-//     const employee = await Employee.findOne({ where: { email } });
-
-//     if (!employee) {
-//       return res.status(401).json({ success: false, message: "Invalid email" });
-//     }
-
-//     if (employee.status !== "Active") {
-//       return res.status(403).json({
-//         success: false,
-//         message: "Your account is Inactive. Contact an admin.",
-//       });
-//     }
-//     // validating password
-//     const isValid = await bcrypt.compare(password, employee.password);
-//     if (!isValid) {
-//       return res.status(401).json({ message: "Invalid password" });
-//     }
-
-//     const accessToken = jwt.sign(
-//       { id: employee.id, roleId: employee.roleId },
-//       process.env.JWT_SECRET,
-//       { expiresIn: process.env.JWT_EXPIRES_IN },
-//     );
-//     const refreshToken = await createRefreshToken(employee);
-//     res.status(200).json({
-//       success: true,
-//       message: "Login successful",
-//       data: { accessToken, refreshToken: refreshToken.token },
-//     });
-//   } catch (err) {
-//     next(err);
-//   }
-// };
-
-// const changePassword = async (req, res,next) => {
-//   const { currentPassword, newPassword } = req.body;
-
-//   if (!currentPassword || !newPassword) {
-//     return res.status(422).json({
-//       success:false,
-//       message: "currentPassword, newPasswords are required",
-//     });
-//   }
-
-//   if (newPassword.length < 8) {
-//     return res
-//       .status(422)
-//       .json({ message: "Password must be at least 8 characters" });
-//   }
-
-//   try {
-//     const employee = await Employee.findByPk(req.employee.id);
-//     if (!employee)
-//       return res.status(404).json({ message: "Employee not found" });
-
-//     const isValid = await bcrypt.compare(currentPassword, employee.password);
-//     if (!isValid)
-//       return res.status(401).json({ message: "Current password is incorrect" });
-
-//     const passwordHash = await bcrypt.hash(newPassword, 10);
-//     await employee.update({ password: passwordHash });
-
-//     res.json({ success: false, message: "Password changed successfully" });
-//   } catch (err) {
-//     next(err);
-//   }
-// };
-
-// module.exports = { login, changePassword };
 "use strict";
 const bcrypt = require("bcrypt");
 const jwt = require("jsonwebtoken");
 const crypto = require("crypto");
-const { Employee } = require("../models");
+const { Employee, Role, Permission } = require("../models");
 const { sendMail } = require("../utils/mailer");
 const { generateOtp } = require("../utils/generateIds");
 const { otpEmailTemplate } = require("../templates/otpEmail");
@@ -94,10 +14,14 @@ const {
   revokeAllRefreshTokens,
 } = require("../utils/refreshToken");
 const { success, error } = require("../utils/response");
+const { v4: uuidv4 } = require("uuid");
+const {
+  getEffectivePermissionCodes,
+} = require("../middleWare/auth.middleware");
 
 const JWT_SECRET = process.env.JWT_SECRET;
 const JWT_EXPIRES_IN = process.env.JWT_EXPIRES_IN || "8h";
-const OTP_EXPIRY_MINUTES = 10;
+const OTP_EXPIRY_MINUTES = 5;
 const RESET_TOKEN_SECRET = process.env.RESET_TOKEN_SECRET;
 const RESET_TOKEN_EXPIRES_IN = "5m";
 
@@ -107,12 +31,10 @@ function sanitizeEmployee(employee) {
     employee.toJSON();
   return safe;
 }
-
 /**
  * POST /api/auth/login
- * body: { email, password }
  */
-async function login(req, res, next) {
+const login = async (req, res, next) => {
   try {
     const { email, password } = req.body;
 
@@ -148,13 +70,11 @@ async function login(req, res, next) {
   } catch (err) {
     next(err);
   }
-}
-
+};
 /**
  * POST /api/auth/refresh-token
- * body: { refreshToken }
  */
-async function refreshTokenHandler(req, res, next) {
+const refreshTokenHandler = async (req, res, next) => {
   try {
     const { refreshToken: incomingToken } = req.body;
     if (!incomingToken) return error(res, 400, "refreshToken is required");
@@ -213,101 +133,170 @@ async function refreshTokenHandler(req, res, next) {
   } catch (err) {
     next(err);
   }
-}
-
+};
 /**
  * POST /api/auth/forgot-password
- * body: { email }
  */
-async function forgotPassword(req, res, next) {
+const forgotPassword = async (req, res, next) => {
   try {
     const { email } = req.body;
-    if (!email) return error(res, 422, "Email is required");
 
-    // Same response whether or not the email exists — don't let this
-    // endpoint be used to check which emails are registered.
-    const genericMessage =
-      "If that email is registered, an OTP has been sent to it.";
+    if (!email || typeof email !== "string") {
+      return error(res, 422, "Email is required");
+    }
 
-    const employee = await Employee.findOne({ where: { email } });
-    if (!employee) return success(res, 200, genericMessage);
+    // Find employee
+    const employee = await Employee.findOne({
+      where: {
+        email,
+      },
+    });
 
+    if (!employee) {
+      return error(res, 404, "Employee not found");
+    }
+
+    // Check employee status
+    if (employee.status && employee.status.toLowerCase() !== "active") {
+      return error(
+        res,
+        403,
+        "Your account is inactive. Please contact the admin.",
+      );
+    }
     const otp = generateOtp();
-    const hashedOtp = crypto.createHash("sha256").update(otp).digest("hex");
-    const expires = new Date(Date.now() + OTP_EXPIRY_MINUTES * 60 * 1000);
 
+    // Hash OTP before storing
+    const hashedOtp = crypto.createHash("sha256").update(otp).digest("hex");
+    // Set OTP expiry
+    const expiresAt = new Date(Date.now() + OTP_EXPIRY_MINUTES * 60 * 1000);
+
+    // 8. Save OTP details
     await employee.update({
       resetPasswordToken: hashedOtp,
-      resetPasswordExpires: expires,
+      resetPasswordExpires: expiresAt,
     });
 
-    await sendMail({
-      to: employee.email,
-      subject: "Your Germitech password reset code",
-      html: otpEmailTemplate({
-        name: employee.name,
-        otp,
-        expiresInMinutes: OTP_EXPIRY_MINUTES,
-      }),
-    });
+    // 9. Send OTP email
+    try {
+      await sendMail({
+        to: employee.email,
+        subject: "Your Germitech Password Reset Code",
+        html: otpEmailTemplate({
+          name: employee.name,
+          otp,
+          expiresInMinutes: OTP_EXPIRY_MINUTES,
+        }),
+      });
+    } catch (mailError) {
+      await employee.update({
+        resetPasswordToken: null,
+        resetPasswordExpires: null,
+      });
 
-    return success(res, 200, genericMessage);
+      throw mailError;
+    }
+    return success(
+      res,
+      200,
+      "Password reset OTP has been sent to your email address",
+    );
   } catch (err) {
     next(err);
   }
-}
-
-/**
- * POST /api/auth/verify-otp
- * body: { email, otp }
- * Confirms the OTP, consumes it immediately (single-use), and issues a
- * short-lived resetToken that authorizes the actual password change.
- */
-async function verifyOtp(req, res, next) {
+};
+// Verify OTP
+const verifyOtp = async (req, res, next) => {
   try {
     const { email, otp } = req.body;
-    if (!email) return error(res, 422, "email is required");
-    if (!otp) return error(res, 422, "otp is required");
 
-    const hashedOtp = crypto.createHash("sha256").update(otp).digest("hex");
+    if (!email || typeof email !== "string")
+      return error(res, 422, "Email is required");
 
+    if (!otp) return error(res, 422, "OTP is required");
+
+    // Find employee
     const employee = await Employee.findOne({
-      where: { email, resetPasswordToken: hashedOtp },
+      where: {
+        email,
+      },
     });
 
-    if (
-      !employee ||
-      !employee.resetPasswordExpires ||
-      employee.resetPasswordExpires < new Date()
-    ) {
-      return error(res, 400, "OTP is invalid or has expired");
+    if (!employee) {
+      return error(res, 404, "Employee not found");
     }
 
+    // Check employee status
+    if (employee.status && employee.status.toLowerCase() !== "active") {
+      return error(
+        res,
+        403,
+        "Your account is inactive. Please contact the admin.",
+      );
+    }
+
+    // Check whether an OTP was generated
+    if (!employee.resetPasswordToken || !employee.resetPasswordExpires) {
+      return error(
+        res,
+        400,
+        "No password reset OTP is available. Please request a new OTP.",
+      );
+    }
+
+    // Check OTP expiry
+    if (new Date() > new Date(employee.resetPasswordExpires)) {
+      // Clear expired OTP
+      await employee.update({
+        resetPasswordToken: null,
+        resetPasswordExpires: null,
+      });
+
+      return error(res, 400, "The OTP has expired");
+    }
+
+    // Hash the entered OTP
+    const hashedOtp = crypto.createHash("sha256").update(otp).digest("hex");
+
+    // Compare OTP
+    if (hashedOtp !== employee.resetPasswordToken) {
+      return error(res, 400, "Invalid OTP");
+    }
+
+    // OTP is valid — clear it so it cannot be reused
     await employee.update({
       resetPasswordToken: null,
       resetPasswordExpires: null,
     });
 
+    let token = uuidv4();
+
+    // Generate password reset token
     const resetToken = jwt.sign(
-      { id: employee.id, purpose: "password_reset" },
+      {
+        id: employee.id,
+        purpose: "password_reset",
+      },
       RESET_TOKEN_SECRET,
       {
         expiresIn: RESET_TOKEN_EXPIRES_IN,
       },
     );
 
-    return success(res, 200, "OTP verified", { data: { resetToken } });
+    // Return reset token
+    return success(res, 200, "OTP verified successfully.", {
+      data: {
+        resetToken,
+      },
+    });
   } catch (err) {
     next(err);
   }
-}
-
+};
 /**
  * POST /api/auth/reset-password
- * body: { resetToken, newPassword, confirmPassword }
- * resetToken comes from verify-otp — email/OTP are not needed again here.
  */
-async function resetPassword(req, res, next) {
+const resetPassword = async (req, res, next) => {
   try {
     const { resetToken, newPassword, confirmPassword } = req.body;
 
@@ -351,14 +340,11 @@ async function resetPassword(req, res, next) {
   } catch (err) {
     next(err);
   }
-}
-
+};
 /**
  * POST /api/auth/change-password
- * Requires auth middleware to have set req.employee = { id: <employeeId>, ... }
- * body: { currentPassword, newPassword }
  */
-async function changePassword(req, res, next) {
+const changePassword = async (req, res, next) => {
   try {
     if (!req.employee) return error(res, 401, "Authentication required");
 
@@ -389,8 +375,52 @@ async function changePassword(req, res, next) {
   } catch (err) {
     next(err);
   }
-}
+};
+const getUserDetails = async (req, res, next) => {
+  try {
+    if (!req.employee) return error(res, 401, "Authentication required");
 
+    const employee = await Employee.findByPk(req.employee.id, {
+      include: {
+        model: Role,
+        as: "role",
+        include: { model: Permission, as: "permissions" },
+      },
+    });
+    if (!employee) return error(res, 404, "Employee not found");
+
+    const rolePermissions = employee.role ? employee.role.permissions : [];
+    const effectiveCodes = await getEffectivePermissionCodes(
+      employee.id,
+      rolePermissions,
+    );
+
+    const {
+      password,
+      resetPasswordToken,
+      resetPasswordExpires,
+      role,
+      ...employeeFields
+    } = employee.toJSON();
+
+    return success(res, 200, "Employee details fetched successfully", {
+      data: {
+        ...employeeFields,
+        role: role
+          ? {
+              id: role.id,
+              name: role.name,
+              description: role.description,
+              status: role.status,
+            }
+          : null,
+        permissions: Array.from(effectiveCodes),
+      },
+    });
+  } catch (err) {
+    next(err);
+  }
+};
 module.exports = {
   login,
   refreshToken: refreshTokenHandler,
@@ -398,4 +428,6 @@ module.exports = {
   verifyOtp,
   resetPassword,
   changePassword,
+  getUserDetails,
+  resendOtp:forgotPassword
 };
