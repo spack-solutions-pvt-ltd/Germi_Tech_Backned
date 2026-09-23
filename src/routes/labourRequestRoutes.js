@@ -12,7 +12,7 @@ const {
 } = require("../controller/labourRequestController");
 const {
   labourRequestUpload,
-} = require("../middleware/requestUpload.middleware");
+} = require("../middleWare/requestUpload.middleware");
 const { getMyAssignedAllotmentVillages } = require("../controller/allotmentController");
 // const { authenticate, requirePermission } = require("../middlewares/auth.middleware");
 
