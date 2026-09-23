@@ -1,8 +1,8 @@
 {
   "development": {
-    "username": "root",
-    "password": null,
-    "database": "Germitech_db",
+    "username": "germitech_user",
+    "password": "Spack@123",
+    "database": "germitech_db",
     "host": "127.0.0.1",
     "dialect": "mysql"
   },
@@ -14,9 +14,9 @@
     "dialect": "mysql"
   },
   "production": {
-    "username": "root",
-    "password": null,
-    "database": "database_production",
+    "username": "germitech_user",
+    "password": "Spack@123",
+    "database": "germitech_db",
     "host": "127.0.0.1",
     "dialect": "mysql"
   }

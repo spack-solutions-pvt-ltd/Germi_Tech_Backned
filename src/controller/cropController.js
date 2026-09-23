@@ -138,4 +138,30 @@ async function updateCrop(req, res) {
   }
 }
 
-module.exports = { getAllCrops, getCropById, createCrop, updateCrop };
+const updateCropStatusById = async (req, res, next) => {
+  try {
+    const { cropId } = req.params;
+    if (!cropId)
+      return res
+        .status(400)
+        .json({ status: false, message: "cropId is required" });
+    const crop = await Crop.findByPk(cropId);
+    if (!crop)
+      return res
+        .status(404)
+        .json({ success: false, message: "Crop not found" });
+    await crop.update({ status: req.body.status });
+    return res
+      .status(200)
+      .json({ success: true, message: "Status updated successfully!" });
+  } catch (error) {
+    next(error);
+  }
+};
+module.exports = {
+  getAllCrops,
+  getCropById,
+  createCrop,
+  updateCrop,
+  updateCropStatusById,
+};

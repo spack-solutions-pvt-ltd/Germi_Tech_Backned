@@ -17,7 +17,11 @@ const taskTypeRoutes = require("./taskTypeRoutes");
 const tasksRoutes = require("./taskRoutes");
 const allotmentRoutes = require("./allotmentRoutes");
 const permissionRoutes = require("./permissionRoutes");
+const labourRequestRoutes = require("./labourRequestRoutes");
+const expenseRequestRoutes = require("./expenseRequestRoutes");
+const vehicleRequestRoutes = require("./vehicleRequestRoutes");
 const { getAllStates } = require("../controller/stateController");
+const { getAllNames } = require("../controller/allotmentController");
 
 router.use(indexRoutes.auth, authRoutes);
 // Emp Management
@@ -38,7 +42,12 @@ router.use(indexRoutes.taskType, authenticate, taskTypeRoutes);
 router.use(indexRoutes.tasks, authenticate, tasksRoutes);
 router.use(indexRoutes.allotment, authenticate, allotmentRoutes);
 router.use(indexRoutes.permissions, authenticate, permissionRoutes);
+router.use(indexRoutes.labourRequests, authenticate, labourRequestRoutes);
+router.use(indexRoutes.expenseRequests, authenticate, expenseRequestRoutes);
+router.use(indexRoutes.vehicleRequests, authenticate, vehicleRequestRoutes);
 
+// Independent routes
 router.get(indexRoutes.states, authenticate, getAllStates);
+router.get(indexRoutes.allFields, authenticate, getAllNames);
 
 module.exports = router;

@@ -26,6 +26,10 @@ const indexRoutes = {
   tasks: "/tasks",
   allotment: "/allotments",
   permissions: "/permissions",
+  labourRequests:"/labour-requests",
+  expenseRequests:"/expense-requests",
+  vehicleRequests:"/vehicle-requests",
+  allFields:"/all-fields"
 };
 
 module.exports = {

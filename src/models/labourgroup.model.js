@@ -8,14 +8,12 @@ module.exports = (sequelize, DataTypes) => {
         foreignKey: "createdBy",
         as: "creator",
       });
-        this.hasMany(models.LaborGroupCropRate, {
-          foreignKey: "laborGroupId",
-          as: "cropRates",
-          onDelete: "CASCADE",
-        });
-      // Payments History (Labor Payments) is a bigger ledger feature of its
-      // own — ID, Requested/Approved/Processed By, Amount, Mode, plus the
-      // nested advance/paid/due + bags/DK-qty/Kanta-bill sub-ledger.
+      this.hasMany(models.LaborGroupCropRate, {
+        foreignKey: "laborGroupId",
+        as: "cropRates",
+        onDelete: "CASCADE",
+      });
+
     }
   }
 

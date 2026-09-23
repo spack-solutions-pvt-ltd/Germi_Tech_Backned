@@ -9,12 +9,14 @@ module.exports = (sequelize, DataTypes) => {
       this.belongsTo(models.Village, { foreignKey: "villageId", as: "village" });
       this.belongsTo(models.SubOrganizer, { foreignKey: "subOrganizerId", as: "subOrganizer" });
       this.belongsTo(models.Employee, { foreignKey: "supervisorId", as: "supervisor" });
+      this.hasMany(models.LabourRequestCropEntry, { foreignKey: "allotmentVillageId", as: "labourCropEntries" });
     }
   }
 
   AllotmentVillage.init(
     {
       allotmentId: DataTypes.INTEGER,
+      allotmentVillageId:DataTypes.STRING,
       villageId: DataTypes.INTEGER,
       subOrganizerId: DataTypes.INTEGER,
       supervisorId: DataTypes.INTEGER,

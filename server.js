@@ -28,6 +28,13 @@ app.use(express.urlencoded({ extended: true }));
 // file uploads
 app.use("/uploads", express.static(path.join(__dirname, "src", "uploads")));
 
+app.get("/", (req, res) => {
+  res.status(200).json({
+    success: true,
+    message: "Server Working",
+  });
+});
+
 // Main Routes
 app.use("/v1/admin", adminRoutes);
 

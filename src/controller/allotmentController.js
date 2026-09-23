@@ -131,7 +131,7 @@ async function getAllAllotments(req, res, next) {
     if (companyId) where.companyId = companyId;
     if (season) where.season = season;
     if (year) where.year = year;
-    if (search) where.allotmentCode = { [Op.like]: `%${search}%` };
+    if (search) where.allotmentId = { [Op.like]: `%${search}%` };
 
     const [result, summary] = await Promise.all([
       Allotment.findAndCountAll({
@@ -212,7 +212,7 @@ async function getAllotmentVillageTable(req, res, next) {
         {
           model: Employee,
           as: "supervisor",
-          attributes: ["id", "empId", "name"],
+          attributes: ["id", "empId", "name","level"],
         },
       ],
       distinct: true,
@@ -237,12 +237,26 @@ async function getAllotmentById(req, res, next) {
   try {
     const { id } = req.params;
     if (!id) return error(res, 400, "id is required");
+    const { search } = req.query;
+    const villageWhere = {};
+
+    if (search) {
+      const term = `%${search.trim()}%`;
+      villageWhere[Op.or] = [
+        { "$village.name$": { [Op.like]: term } },
+        { $allotmentVillageId$: { [Op.like]: term } },
+        { "$subOrganizer.name$": { [Op.like]: term } },
+        { "$supervisor.name$": { [Op.like]: term } },
+        { "$supervisor.empId$": { [Op.like]: term } },
+      ];
+    }
 
     const allotment = await Allotment.findByPk(id, {
       include: [
         ...ALLOTMENT_INCLUDES,
         {
           model: AllotmentVillage,
+          where: villageWhere,
           as: "villageAllotments",
           include: [
             {
@@ -258,7 +272,7 @@ async function getAllotmentById(req, res, next) {
             {
               model: Employee,
               as: "supervisor",
-              attributes: ["id", "empId", "name"],
+              attributes: ["id", "empId", "name","level"],
             },
           ],
           separate: true,
@@ -491,6 +505,8 @@ async function addVillageAllotment(req, res, next) {
       standingAcres: 0,
       gpsPendingAcres: allottedAcres,
     });
+    const allotmentVillageId = generateId("AT", villageAllotment?.id);
+    await villageAllotment.update({ allotmentVillageId });
 
     const created = await AllotmentVillage.findByPk(villageAllotment.id, {
       include: [
@@ -499,7 +515,7 @@ async function addVillageAllotment(req, res, next) {
         {
           model: Employee,
           as: "supervisor",
-          attributes: ["id", "empId", "name"],
+          attributes: ["id", "empId", "name","level"],
         },
       ],
     });
@@ -530,8 +546,13 @@ async function updateVillageAllotment(req, res, next) {
     if (!villageAllotment)
       return error(res, 404, "Village allotment not found");
 
-    const { allottedAcres, standingAcres, gpsPendingAcres, supervisorId } =
-      req.body;
+    const {
+      allottedAcres,
+      standingAcres,
+      gpsPendingAcres,
+      supervisorId,
+      subOrganizerId,
+    } = req.body;
 
     if (supervisorId !== undefined) {
       const supervisor = await Employee.findByPk(supervisorId);
@@ -569,6 +590,7 @@ async function updateVillageAllotment(req, res, next) {
       ...(standingAcres !== undefined && { standingAcres }),
       ...(gpsPendingAcres !== undefined && { gpsPendingAcres }),
       ...(supervisorId !== undefined && { supervisorId }),
+      ...(subOrganizerId !== undefined && { subOrganizerId }),
     });
 
     return success(res, 200, "Village allotment updated successfully", {
@@ -579,6 +601,80 @@ async function updateVillageAllotment(req, res, next) {
   }
 }
 
+async function getMyAssignedAllotmentVillages(req, res, next) {
+  try {
+
+    const rows = await AllotmentVillage.findAll({
+      where: { supervisorId: req.employee.id },
+      include: [
+        {
+          model: Village,
+          as: "village",
+          attributes: ["id", "name", "villageId"],
+        },
+        {
+          model: Allotment,
+          as: "allotment",
+          attributes: ["id", "allotmentId"],
+          include: {
+            model: CompanyCrop,
+            as: "companyCrop",
+            attributes: ["id", "varietyName"],
+            include: { model: Crop, as: "crop", attributes: ["id", "name"] },
+          },
+        },
+      ],
+      order: [["createdAt", "DESC"]],
+    });
+
+    // Flatten into exactly the shape the dropdown needs: one line "AL-1001"
+    // plus a sub-caption "Village -> Crop -> Variety".
+    const options = rows.map((row) => ({
+      allotmentVillageId: row.id,
+      allotmentId: row.allotment.allotmentId,
+      village: row.village.name,
+      crop: row.allotment.companyCrop.crop.name,
+      variety: row.allotment.companyCrop.varietyName,
+      allottedAcres: row.allottedAcres,
+    }));
+
+    return success(
+      res,
+      200,
+      "Assigned allotment-villages fetched successfully",
+      { data: options },
+    );
+  } catch (err) {
+    next(err);
+  }
+}
+
+const getAllNames = async (req, res, next) => {
+  try {
+    const [villages, companies, crops] = await Promise.all([
+      Village.findAll({
+        attributes: ["id", "name"],
+      }),
+      SeedCompany.findAll({
+        attributes: ["id", "name"],
+      }),
+      Crop.findAll({
+        attributes: ["id", "name"],
+      }),
+    ]);
+
+    const data = {
+      villages,
+      companies,
+      crops,
+    };
+
+    return success(res, 200, "Data Fetched!", { data });
+  } catch (error) {
+    next(error);
+  }
+};
+
 module.exports = {
   getAllAllotments,
   getAllotmentVillageTable,
@@ -588,4 +684,6 @@ module.exports = {
   deleteAllotment,
   addVillageAllotment,
   updateVillageAllotment,
+  getMyAssignedAllotmentVillages,
+  getAllNames,
 };

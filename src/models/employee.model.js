@@ -18,6 +18,12 @@ module.exports = (sequelize, DataTypes) => {
         onDelete: "CASCADE",
       });
 
+      // Who last edited this employee's bank account card (shown as
+      // "Last updated ... <name>" on the employee details page). Self-join
+      // on Employee, so it needs its own alias distinct from the "employee"
+      // side of the relationship.
+      this.belongsTo(models.Employee, { foreignKey: "bankUpdatedBy", as: "bankUpdater" });
+
       // Direct, per-employee permission overrides (on top of their Role).
       this.belongsToMany(models.Permission, {
         through: models.IndividualPermission,
@@ -83,6 +89,10 @@ module.exports = (sequelize, DataTypes) => {
         foreignKey: "authorId",
         as: "taskNotes",
       });
+      this.hasMany(models.LabourRequest, {
+        foreignKey: "supervisorId",
+        as: "labourRequests",
+      });
     }
   }
 
@@ -96,6 +106,7 @@ module.exports = (sequelize, DataTypes) => {
       password: DataTypes.STRING,
       level: DataTypes.ENUM("L1", "L2", "L3"),
       roleId: DataTypes.INTEGER,
+      joiningDate: DataTypes.DATEONLY,
       status: {
         type: DataTypes.ENUM("Active", "Inactive"),
         allowNull: false,
@@ -103,6 +114,15 @@ module.exports = (sequelize, DataTypes) => {
       },
       resetPasswordToken: DataTypes.STRING,
       resetPasswordExpires: DataTypes.DATE,
+
+      // --- Bank account details card ("Salary and reimbursement account") ---
+      accountHolderName: DataTypes.STRING(150),
+      accountNumber: DataTypes.STRING(50),
+      ifscCode: DataTypes.STRING(20),
+      bankName: DataTypes.STRING(150),
+      upiId: DataTypes.STRING(100),
+      bankUpdatedBy: DataTypes.INTEGER, // Employee.id of whoever last saved the bank card
+      bankUpdatedAt: DataTypes.DATE,
     },
     {
       sequelize,
