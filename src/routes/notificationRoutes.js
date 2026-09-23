@@ -8,8 +8,7 @@ const {
   getResponsesByNotification,
   createNotificationResponse,
 } = require("../controller/notificationController");
-const { notificationImageUpload } = require("../middleware/upload.middleware");
-// const { authenticate, requirePermission } = require("../middlewares/auth.middleware");
+const { notificationImageUpload } = require("../middleWare/upload.middleware");
 
 const router = Router();
 
