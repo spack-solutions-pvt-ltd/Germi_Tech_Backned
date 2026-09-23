@@ -13,7 +13,6 @@ const {
 const {
   expenseRequestUpload,
 } = require("../middleWare/requestUpload.middleware");
-// const { authenticate, requirePermission } = require("../middlewares/auth.middleware");
 
 const router = Router();
 
