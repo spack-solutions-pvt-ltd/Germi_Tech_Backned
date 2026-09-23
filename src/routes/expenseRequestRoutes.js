@@ -12,7 +12,7 @@ const {
 } = require("../controller/expenseRequestController");
 const {
   expenseRequestUpload,
-} = require("../middleware/requestUpload.middleware");
+} = require("../middleWare/requestUpload.middleware");
 // const { authenticate, requirePermission } = require("../middlewares/auth.middleware");
 
 const router = Router();
