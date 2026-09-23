@@ -5,7 +5,7 @@ module.exports = {
   async up(queryInterface, Sequelize) {
     const now = new Date();
     await queryInterface.bulkInsert(
-      "permissions",
+      "Permissions",
       PERMISSIONS.map((p) => ({ ...p, createdAt: now, updatedAt: now })),
       {
         // Ignore duplicates on re-run rather than throwing on the unique `code`.
@@ -16,7 +16,7 @@ module.exports = {
 
   async down(queryInterface, Sequelize) {
     await queryInterface.bulkDelete(
-      "permissions",
+      "Permissions",
       { code: PERMISSIONS.map((p) => p.code) },
       {},
     );

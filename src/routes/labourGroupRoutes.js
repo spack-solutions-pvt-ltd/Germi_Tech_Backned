@@ -7,8 +7,6 @@ const {
   updateLaborGroup,
 } = require("../controller/labourGroupController");
 
-// const { authenticate, requirePermission } = require("../middlewares/auth.middleware");
-
 const router = Router();
 
 router.get("/", getAllLaborGroups);

@@ -25,12 +25,6 @@ const OTP_EXPIRY_MINUTES = 5;
 const RESET_TOKEN_SECRET = process.env.RESET_TOKEN_SECRET;
 const RESET_TOKEN_EXPIRES_IN = "5m";
 
-// Fields that should never leave this file in a response body.
-function sanitizeEmployee(employee) {
-  const { password, resetPasswordToken, resetPasswordExpires, ...safe } =
-    employee.toJSON();
-  return safe;
-}
 /**
  * POST /api/auth/login
  */

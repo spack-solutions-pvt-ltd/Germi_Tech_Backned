@@ -18,7 +18,6 @@ const {
 const { success, error } = require("../utils/response");
 const { generateId } = require("../utils/generateIds");
 
-
 const ALLOTMENT_INCLUDES = [
   {
     model: SeedCompany,
@@ -40,7 +39,7 @@ const ALLOTMENT_INCLUDES = [
 ];
 
 /** Sums an Allotment's village rows into allottedAcres/standingAcres/gpsPendingAcres/balanceAcres. */
-function withVillageTotals(allotment) {
+const withVillageTotals = (allotment) => {
   const villageRows = allotment.villageAllotments || [];
   const allottedAcres = villageRows.reduce(
     (s, v) => s + Number(v.allottedAcres || 0),
@@ -63,14 +62,14 @@ function withVillageTotals(allotment) {
     gpsPendingAcres,
     balanceAcres,
   };
-}
+};
 
 /**
  * List-page cards: Acres allotted / Standing acres / Balance acres / GPS
  * pending acres, aggregated across every Allotment matching the current
  * filters (not just the current page).
  */
-async function getAllotmentSummary(where, cropId) {
+const getAllotmentSummary = async (where, cropId) => {
   const allotments = await Allotment.findAll({
     where,
     attributes: ["id", "reqAcres"],
@@ -120,10 +119,11 @@ async function getAllotmentSummary(where, cropId) {
     balanceAcres: totalReqAcres - (acresAllotted || 0),
     gpsPendingAcres: gpsPendingAcres || 0,
   };
-}
+};
 
-/** GET /api/allotments?companyId=&cropId=&season=&year=&search=&page=&limit= */
-async function getAllAllotments(req, res, next) {
+/** Controller function for tp get all the procurements
+*/
+const getAllAllotments = async (req, res, next) => {
   try {
     const { search, companyId, cropId, season, year } = req.query;
     const { page, limit, offset } = getPagination(req.query);
@@ -172,14 +172,11 @@ async function getAllAllotments(req, res, next) {
   } catch (err) {
     next(err);
   }
-}
+};
 
-/**
- * GET /api/allotments/village-table
- * The "Allotted table" tab — a flat list of every village-level allotment
- * row across all allotments. Filters: villageId, companyId, season, year, supervisorId.
+/** Controller function to get the all the village allotments from all procurements
  */
-async function getAllotmentVillageTable(req, res, next) {
+const getAllotmentVillageTable = async (req, res, next) => {
   try {
     const { villageId, companyId, season, year, supervisorId } = req.query;
     const { page, limit, offset } = getPagination(req.query);
@@ -213,7 +210,7 @@ async function getAllotmentVillageTable(req, res, next) {
         {
           model: Employee,
           as: "supervisor",
-          attributes: ["id", "empId", "name","level"],
+          attributes: ["id", "empId", "name", "level"],
         },
       ],
       distinct: true,
@@ -231,10 +228,10 @@ async function getAllotmentVillageTable(req, res, next) {
   } catch (err) {
     next(err);
   }
-}
+};
 
 /** GET /api/allotments/:id */
-async function getAllotmentById(req, res, next) {
+const getAllotmentById = async (req, res, next) => {
   try {
     const { id } = req.params;
     if (!id) return error(res, 400, "id is required");
@@ -273,7 +270,7 @@ async function getAllotmentById(req, res, next) {
             {
               model: Employee,
               as: "supervisor",
-              attributes: ["id", "empId", "name","level"],
+              attributes: ["id", "empId", "name", "level"],
             },
           ],
           separate: true,
@@ -290,13 +287,11 @@ async function getAllotmentById(req, res, next) {
   } catch (err) {
     next(err);
   }
-}
+};
 
-/**
- * POST /api/allotments
- * body: { companyId, companyCropId, reqAcres, reqQtyKgs, season, year }
+/** Controller function to create the Allotment
  */
-async function createAllotment(req, res, next) {
+const createAllotment = async (req, res, next) => {
   try {
     const { companyId, companyCropId, reqAcres, reqQtyKgs, season, year } =
       req.body;
@@ -344,14 +339,11 @@ async function createAllotment(req, res, next) {
   } catch (err) {
     next(err);
   }
-}
+};
 
-/**
- * PUT/PATCH /api/allotments/:id
- * companyId/companyCropId are immutable — they define which allotment this
- * is. Only the requirement numbers and its open/closed state can change.
+/** Controller function to update the procurement
  */
-async function updateAllotment(req, res, next) {
+const updateAllotment = async (req, res, next) => {
   try {
     const { id } = req.params;
     if (!id) return error(res, 400, "id is required");
@@ -405,14 +397,11 @@ async function updateAllotment(req, res, next) {
   } catch (err) {
     next(err);
   }
-}
+};
 
-/**
- * DELETE /api/allotments/:id
- * Blocked once any village has been allotted, per the spec's rule: "Delete
- * can only be performed before allotting to any village."
+/** Controller function to delete Allotment
  */
-async function deleteAllotment(req, res, next) {
+const deleteAllotment = async (req, res, next) => {
   try {
     const { id } = req.params;
     if (!id) return error(res, 400, "id is required");
@@ -439,13 +428,11 @@ async function deleteAllotment(req, res, next) {
   } catch (err) {
     next(err);
   }
-}
+};
 
-/**
- * POST /api/allotments/:id/villages — the "Allot" button on the single
- * allotment page. body: { villageId, subOrganizerId?, allottedAcres, supervisorId? }
+/**Controller function for to create the villageAllotment
  */
-async function addVillageAllotment(req, res, next) {
+const addVillageAllotment = async (req, res, next) => {
   try {
     const { id } = req.params;
     if (!id) return error(res, 400, "id is required");
@@ -494,9 +481,6 @@ async function addVillageAllotment(req, res, next) {
       );
     }
 
-    // Newly allotted acres start un-verified in the field — standing crop
-    // hasn't grown yet and GPS boundary capture hasn't happened yet.
-    // Assumption: flag if you want different defaults here.
     const villageAllotment = await AllotmentVillage.create({
       allotmentId: id,
       villageId,
@@ -516,7 +500,7 @@ async function addVillageAllotment(req, res, next) {
         {
           model: Employee,
           as: "supervisor",
-          attributes: ["id", "empId", "name","level"],
+          attributes: ["id", "empId", "name", "level"],
         },
       ],
     });
@@ -527,12 +511,9 @@ async function addVillageAllotment(req, res, next) {
   } catch (err) {
     next(err);
   }
-}
+};
 
-/**
- * PUT/PATCH /api/allotments/:id/villages/:villageAllotmentId
- * Edits one village row's acres/supervisor — the "Edit" action in the
- * Single Allotment page's table.
+/** Controller function update the villageAllotment
  */
 async function updateVillageAllotment(req, res, next) {
   try {
@@ -602,9 +583,8 @@ async function updateVillageAllotment(req, res, next) {
   }
 }
 
-async function getMyAssignedAllotmentVillages(req, res, next) {
+const getMyAssignedAllotmentVillages = async (req, res, next) => {
   try {
-
     const rows = await AllotmentVillage.findAll({
       where: { supervisorId: req.employee.id },
       include: [
@@ -648,7 +628,7 @@ async function getMyAssignedAllotmentVillages(req, res, next) {
   } catch (err) {
     next(err);
   }
-}
+};
 
 const getAllNames = async (req, res, next) => {
   try {
