@@ -21,11 +21,15 @@ async function getAllLaborGroups(req, res, next) {
     const { page, limit, offset } = getPagination(req.query);
 
     const where = {};
-    if (search) {
-      const term = `%${search.trim()}%`;
+    if (search?.trim()) {
+      const term = `%${search.trim().toLowerCase()}%`;
       where[Op.or] = [
-        { name: { [Op.like]: term } },
-        { laborGroupId: { [Op.like]: term } },
+        sequelizeWhere(fn("LOWER", col("name")), {
+          [Op.like]: term,
+        }),
+        sequelizeWhere(fn("LOWER", col("laborGroupId")), {
+          [Op.like]: term,
+        }),
       ];
     }
 

@@ -5,10 +5,6 @@ const { generateId } = require("../../utils/generateIds");
 
 module.exports = {
   async up(queryInterface, Sequelize) {
-    // Assumes the permissions seeder (20260908000000-seed-permissions.js) has
-    // already run. Attaches whatever permissions currently exist to Admin,
-    // so re-running this after adding new permission modules picks them up
-    // automatically — no need to edit this file when the permission list grows.
     const allPermissions = await Permission.findAll();
 
     const [adminRole] = await Role.findOrCreate({

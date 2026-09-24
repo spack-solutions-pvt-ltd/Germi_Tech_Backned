@@ -47,18 +47,32 @@ const getAllNotifications = async (req, res, next) => {
     const { page, limit, offset } = getPagination(req.query);
 
     const where = {};
+
     if (search) {
       const term = `%${search.trim()}%`;
+
       where[Op.or] = [
-        { message: { [Op.like]: term } },
-        { notificationId: { [Op.like]: term } },
+        {
+          message: {
+            [Op.like]: term,
+          },
+        },
+        {
+          notificationId: {
+            [Op.like]: term,
+          },
+        },
       ];
     }
-    if (toLevel) where.toLevel = toLevel;
+
+    if (toLevel) {
+      where.toLevel = toLevel;
+    }
 
     const [result, summary] = await Promise.all([
       Notification.findAndCountAll({
         where,
+
         include: [
           {
             model: Employee,
@@ -66,20 +80,27 @@ const getAllNotifications = async (req, res, next) => {
             attributes: ["id", "empId", "name", "level"],
           },
         ],
+
         attributes: {
           include: [
             [
-              sequelize.literal(
-                "(SELECT COUNT(*) FROM notificationresponses WHERE notificationresponses.notificationId = Notification.id)",
-              ),
+              sequelize.literal(`
+                (
+                  SELECT COUNT(*)
+                  FROM notificationresponses AS nr
+                  WHERE nr.notificationId = Notification.id
+                )
+              `),
               "responsesCount",
             ],
           ],
         },
+
         order: [["createdAt", "DESC"]],
         limit,
         offset,
       }),
+
       getNotificationSummary(),
     ]);
 
