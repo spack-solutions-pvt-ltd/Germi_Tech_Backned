@@ -29,6 +29,7 @@ const indexRoutes = {
   labourRequests:"/labour-requests",
   expenseRequests:"/expense-requests",
   vehicleRequests:"/vehicle-requests",
+  loadingRequests:"/loading-requests",
   allFields:"/all-fields"
 };
 

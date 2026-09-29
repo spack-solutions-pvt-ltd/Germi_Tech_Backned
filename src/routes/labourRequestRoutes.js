@@ -17,14 +17,14 @@ const { getMyAssignedAllotmentVillages } = require("../controller/allotmentContr
 
 const router = Router();
 
-router.get("/my-requests", getMyLabourRequests);
+router.get("/my-requests", getMyLabourRequests); //my requests
 router.get("/allotment-villages",getMyAssignedAllotmentVillages)
-router.get("/", getAllLabourRequests); 
-router.get("/:id", getLabourRequestById);
+router.get("/", getAllLabourRequests); //verifications and approvals 
+router.get("/:id", getLabourRequestById); 
 router.post("/", labourRequestUpload, createLabourRequest);
 router.put("/:id", labourRequestUpload, updateLabourRequest);
 router.put("/:id/verify", verifyLabourRequest);
 router.put("/:id/approve", approveLabourRequest);
 router.put("/:id/reject", rejectLabourRequest);
-  
+
 module.exports = router;

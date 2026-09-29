@@ -29,11 +29,7 @@ module.exports = (sequelize, DataTypes) => {
 
   ExpenseRequest.init(
     {
-      requestCode: {
-        type: DataTypes.STRING(30),
-        allowNull: false,
-        unique: true,
-      }, // e.g. EX-1001
+      requestCode: DataTypes.STRING(30), // e.g. EX-1001
       requestedBy: DataTypes.INTEGER, // who the request is FOR (the supervisor)
       createdBy: DataTypes.INTEGER, // who actually submitted it — usually same as requestedBy, differs when L1/L2 create it on a supervisor's behalf
       purpose: { type: DataTypes.STRING(255), allowNull: false },

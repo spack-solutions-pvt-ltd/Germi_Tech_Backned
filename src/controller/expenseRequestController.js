@@ -46,7 +46,7 @@ async function listExpenseRequests(where, req, res, next) {
 
 /** GET /api/expense-requests/my-requests — the L3 "Requests" tab: own requests only */
 async function getMyExpenseRequests(req, res, next) {
-    return listExpenseRequests({ requestedBy: req.employee.id }, req, res, next);
+  return listExpenseRequests({ requestedBy: req.employee.id }, req, res, next);
 }
 
 /** GET /api/expense-requests — Verifications/Approvals: every supervisor's requests */
@@ -81,7 +81,6 @@ const getExpenseRequestById = async (req, res, next) => {
  */
 async function createExpenseRequest(req, res, next) {
   try {
-    
     const { purpose, amount, note } = req.body;
 
     if (!purpose) return error(res, 400, "purpose is required");
@@ -103,11 +102,9 @@ async function createExpenseRequest(req, res, next) {
       requestedBy = Number(onBehalfOf);
     }
 
-    const requestCode = await generateId(ExpenseRequest, "EX");
     const bill = req.file;
 
     const request = await ExpenseRequest.create({
-      requestCode,
       requestedBy,
       createdBy: req.employee.id,
       purpose,
@@ -116,6 +113,8 @@ async function createExpenseRequest(req, res, next) {
       note,
       status: "pending",
     });
+    const requestCode = await generateId("EX", request?.id);
+    await request.update({ requestCode });
 
     const created = await ExpenseRequest.findByPk(request.id, {
       include: INCLUDES,
@@ -167,7 +166,6 @@ const updateExpenseRequest = async (req, res, next) => {
 /** PUT /api/expense-requests/:id/verify — L2 action */
 const verifyExpenseRequest = async (req, res, next) => {
   try {
-
     const { id } = req.params;
     const request = await ExpenseRequest.findByPk(id);
     if (!request) return error(res, 404, "Expense request not found");
@@ -197,7 +195,6 @@ const verifyExpenseRequest = async (req, res, next) => {
 /** PUT /api/expense-requests/:id/approve — L1 action, creates a Supervisor payment */
 async function approveExpenseRequest(req, res, next) {
   try {
-    
     const { id } = req.params;
     const request = await ExpenseRequest.findByPk(id);
     if (!request) return error(res, 404, "Expense request not found");
@@ -242,7 +239,6 @@ async function approveExpenseRequest(req, res, next) {
 /** PUT /api/expense-requests/:id/reject — L2 (verification stage) or L1 (approval stage) */
 async function rejectExpenseRequest(req, res, next) {
   try {
-    
     const { id } = req.params;
     const { rejectionReason } = req.body;
 

@@ -87,8 +87,8 @@ const getAllNotifications = async (req, res, next) => {
               sequelize.literal(`
                 (
                   SELECT COUNT(*)
-                  FROM notificationresponses AS nr
-                  WHERE nr.notificationId = Notification.id
+                  FROM \`NotificationResponses\` AS nr
+                  WHERE nr.notificationId = \`Notification\`.id
                 )
               `),
               "responsesCount",

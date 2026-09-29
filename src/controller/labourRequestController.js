@@ -18,6 +18,7 @@ const {
 const { generateId } = require("../utils/generateIds");
 const { success, error } = require("../utils/response");
 const { createPaymentIfNeeded } = require("../utils/createPayment");
+const { includes } = require("zod");
 
 const ENTRY_INCLUDE = {
   model: LabourRequestCropEntry,
@@ -57,6 +58,31 @@ const HEADER_INCLUDES = [
     attributes: ["id", "laborGroupId", "name"],
   },
 ];
+const LIST_ENTRY_INCLUDE = {
+  model: LabourRequestCropEntry,
+  as: "cropEntries",
+  attributes: ["id", "labourRequestId", "labourCount", "acresWorked", "rowingTime"],
+  separate: true, // own query, so it can't multiply parent rows / break pagination
+  include: {
+    model: AllotmentVillage,
+    as: "allotmentVillage",
+    attributes: ["id", "villageId"],
+    include: [
+      { model: Village, as: "village", attributes: ["id", "name"] },
+      {
+        model: Allotment,
+        as: "allotment",
+        attributes: ["id", "allotmentId"],
+        include: {
+          model: CompanyCrop,
+          as: "companyCrop",
+          attributes: ["id", "varietyName"],
+          include: { model: Crop, as: "crop", attributes: ["id", "name"] },
+        },
+      },
+    ],
+  },
+};
 
 /** Shared list logic — `where` is built by the caller so "mine" vs "everyone's" can differ. */
 async function listLabourRequests(where, req, res, next) {
@@ -67,7 +93,10 @@ async function listLabourRequests(where, req, res, next) {
 
     const result = await LabourRequest.findAndCountAll({
       where,
-      include: HEADER_INCLUDES,
+      include: [
+        ...HEADER_INCLUDES,
+        LIST_ENTRY_INCLUDE
+      ],
       order: [["createdAt", "DESC"]],
       limit,
       offset,
@@ -86,7 +115,7 @@ async function listLabourRequests(where, req, res, next) {
 
 /** GET /api/labour-requests/my-requests — the L3 "Requests" tab: own requests only */
 async function getMyLabourRequests(req, res, next) {
-    return listLabourRequests({ requestedBy: req.employee.id }, req, res, next);
+  return listLabourRequests({ requestedBy: req.employee.id }, req, res, next);
 }
 
 /** GET /api/labour-requests — Verifications/Approvals: every supervisor's requests */
@@ -127,7 +156,6 @@ async function getLabourRequestById(req, res, next) {
  */
 async function createLabourRequest(req, res, next) {
   try {
-    
     const {
       laborGroupId,
       otherLaborGroupName,
@@ -394,7 +422,6 @@ async function updateLabourRequest(req, res, next) {
  */
 async function verifyLabourRequest(req, res, next) {
   try {
-    
     const { id } = req.params;
     const request = await LabourRequest.findByPk(id);
     if (!request) return error(res, 404, "Labour request not found");
@@ -453,7 +480,6 @@ async function verifyLabourRequest(req, res, next) {
  */
 async function approveLabourRequest(req, res, next) {
   try {
-    
     const { id } = req.params;
     const request = await LabourRequest.findByPk(id, {
       include: [ENTRY_INCLUDE],
@@ -527,7 +553,6 @@ async function approveLabourRequest(req, res, next) {
 /** PUT /api/labour-requests/:id/reject — L2 (verification stage) or L1 (approval stage) */
 async function rejectLabourRequest(req, res, next) {
   try {
-    
     const { id } = req.params;
     const { rejectionReason } = req.body;
 

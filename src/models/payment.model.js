@@ -12,27 +12,54 @@ module.exports = (sequelize, DataTypes) => {
   // the uniqueness key, not just the source.
   class Payment extends Model {
     static associate(models) {
-      this.belongsTo(models.Employee, { foreignKey: "requestedBy", as: "requester" });
-      this.belongsTo(models.Employee, { foreignKey: "verifiedBy", as: "verifier" });
-      this.belongsTo(models.Employee, { foreignKey: "approvedBy", as: "approver" });
-      this.belongsTo(models.Employee, { foreignKey: "processedBy", as: "processor" });
+      this.belongsTo(models.Employee, {
+        foreignKey: "requestedBy",
+        as: "requester",
+      });
+      this.belongsTo(models.Employee, {
+        foreignKey: "verifiedBy",
+        as: "verifier",
+      });
+      this.belongsTo(models.Employee, {
+        foreignKey: "approvedBy",
+        as: "approver",
+      });
+      this.belongsTo(models.Employee, {
+        foreignKey: "processedBy",
+        as: "processor",
+      });
     }
   }
 
   Payment.init(
     {
-      paymentCode: { type: DataTypes.STRING(30), allowNull: false, unique: true }, // e.g. PY-1101
+      paymentCode: DataTypes.STRING(30),
       type: {
-        type: DataTypes.ENUM("labour", "expense", "transport", "hamali", "insurance"),
+        type: DataTypes.ENUM(
+          "labour",
+          "expense",
+          "transport",
+          "hamali",
+          "insurance",
+        ),
         allowNull: false,
       },
       sourceRequestType: {
-        type: DataTypes.ENUM("labour_request", "expense_request", "loading_request"),
+        type: DataTypes.ENUM(
+          "labour_request",
+          "expense_request",
+          "loading_request",
+        ),
         allowNull: false,
       },
       sourceRequestId: { type: DataTypes.INTEGER, allowNull: false },
       recipientType: {
-        type: DataTypes.ENUM("employee", "labor_group", "logistics_partner", "hamali_group"),
+        type: DataTypes.ENUM(
+          "employee",
+          "labor_group",
+          "logistics_partner",
+          "hamali_group",
+        ),
         allowNull: false,
       },
       recipientId: DataTypes.INTEGER,
@@ -61,9 +88,12 @@ module.exports = (sequelize, DataTypes) => {
       sequelize,
       modelName: "Payment",
       indexes: [
-        { unique: true, fields: ["sourceRequestType", "sourceRequestId", "recipientType"] },
+        {
+          unique: true,
+          fields: ["sourceRequestType", "sourceRequestId", "recipientType"],
+        },
       ],
-    }
+    },
   );
 
   return Payment;

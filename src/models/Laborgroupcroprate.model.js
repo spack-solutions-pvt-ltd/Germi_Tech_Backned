@@ -23,7 +23,6 @@ module.exports = (sequelize, DataTypes) => {
     {
       sequelize,
       modelName: "LaborGroupCropRate",
-      tableName: "labor_group_crop_rates",
       indexes: [{ unique: true, fields: ["laborGroupId", "cropId"] }],
     },
   );
