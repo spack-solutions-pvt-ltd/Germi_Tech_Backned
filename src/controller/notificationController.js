@@ -23,7 +23,7 @@ const { generateId } = require("../utils/generateIds");
 const getNotificationSummary = async () => {
   const [unreadRows] = await sequelize.query(
     `SELECT COUNT(*) as count FROM notifications n
-     WHERE NOT EXISTS (SELECT 1 FROM notificationresponses r WHERE r.notificationId = n.id)`,
+     WHERE NOT EXISTS (SELECT 1 FROM NotificationResponses r WHERE r.notificationId = n.id)`,
   );
 
   const [l1Count, l2Count, l3Count] = await Promise.all([
