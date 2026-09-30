@@ -257,7 +257,7 @@ const updateNotification = async (req, res, next) => {
   }
 };
 
-/** GET /api/notifications/:notificationId/responses?page=1&limit=20 */
+// Controller function to get the responses of particular notification
 const getResponsesByNotification = async (req, res, next) => {
   try {
     const { notificationId } = req.params;
@@ -294,10 +294,7 @@ const getResponsesByNotification = async (req, res, next) => {
 };
 
 /**
- * POST /api/notifications/:notificationId/responses
- * Not in your original list, but needed for the Response Table to ever have
- * rows — this is how a recipient (L1/L2/L3) submits their reply.
- * body: { message }
+ * POST create Notification
  */
 const createNotificationResponse = async (req, res, next) => {
   try {
