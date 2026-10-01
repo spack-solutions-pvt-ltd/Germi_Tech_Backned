@@ -1,6 +1,6 @@
 "use strict";
 const { generateId } = require("../utils/generateIds");
-const { Crop } = require("../models");
+const { sequelize, Crop, CompanyCrop } = require("../models");
 const {
   createCropSchema,
   updateCropSchema,
@@ -44,6 +44,17 @@ async function getAllCrops(req, res, next) {
     const offset = (pageNumber - 1) * limitNumber;
 
     const { count, rows } = await Crop.findAndCountAll({
+      attributes: {
+        include: [
+          [
+            // "Associated varieties" — company varieties mapped to this crop.
+            sequelize.literal(
+              "(SELECT COUNT(*) FROM `company_crops` AS cc WHERE cc.cropId = `Crop`.id)",
+            ),
+            "varietyCount",
+          ],
+        ],
+      },
       limit: limitNumber,
       offset,
       order: [["createdAt", "DESC"]],
@@ -158,7 +169,35 @@ const updateCropStatusById = async (req, res, next) => {
     next(error);
   }
 };
+/**
+ * GET /crop/summary — Crops page KPI cards.
+ * totalVarieties counts every seed-company variety (CompanyCrop) across all crops.
+ */
+async function getCropSummary(req, res, next) {
+  try {
+    const [totalCrops, activeCrops, totalVarieties] = await Promise.all([
+      Crop.count(),
+      Crop.count({ where: { status: "Active" } }),
+      CompanyCrop.count(),
+    ]);
+
+    return res.status(200).json({
+      success: true,
+      message: "Crop summary fetched successfully",
+      data: {
+        totalCrops,
+        activeCrops,
+        inactiveCrops: totalCrops - activeCrops,
+        totalVarieties,
+      },
+    });
+  } catch (err) {
+    next(err);
+  }
+}
+
 module.exports = {
+  getCropSummary,
   getAllCrops,
   getCropById,
   createCrop,

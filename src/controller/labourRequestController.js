@@ -17,8 +17,8 @@ const {
 } = require("../utils/pagination");
 const { generateId } = require("../utils/generateIds");
 const { success, error } = require("../utils/response");
+const { createSummaryHandlers } = require("../utils/statusSummary");
 const { createPaymentIfNeeded } = require("../utils/createPayment");
-const { includes } = require("zod");
 
 const ENTRY_INCLUDE = {
   model: LabourRequestCropEntry,
@@ -49,9 +49,9 @@ const HEADER_INCLUDES = [
     as: "requester",
     attributes: ["id", "empId", "name", "level"],
   },
-  { model: Employee, as: "verifier", attributes: ["id", "empId", "name"] },
-  { model: Employee, as: "approver", attributes: ["id", "empId", "name"] },
-  { model: Employee, as: "rejecter", attributes: ["id", "empId", "name"] },
+  { model: Employee, as: "verifier", attributes: ["id", "empId", "name","level"] },
+  { model: Employee, as: "approver", attributes: ["id", "empId", "name","level"] },
+  { model: Employee, as: "rejecter", attributes: ["id", "empId", "name","level"] },
   {
     model: LaborGroup,
     as: "laborGroup",
@@ -61,7 +61,13 @@ const HEADER_INCLUDES = [
 const LIST_ENTRY_INCLUDE = {
   model: LabourRequestCropEntry,
   as: "cropEntries",
-  attributes: ["id", "labourRequestId", "labourCount", "acresWorked", "rowingTime"],
+  attributes: [
+    "id",
+    "labourRequestId",
+    "labourCount",
+    "acresWorked",
+    "rowingTime",
+  ],
   separate: true, // own query, so it can't multiply parent rows / break pagination
   include: {
     model: AllotmentVillage,
@@ -84,6 +90,76 @@ const LIST_ENTRY_INCLUDE = {
   },
 };
 
+/**
+ * Crop-wise cost for a request loaded with ENTRY_INCLUDE. Each entry's crop
+ * comes from its allotment (Allotment -> CompanyCrop -> Crop) and is priced
+ * with the assigned labor group's LaborGroupCropRate for that crop:
+ *   totalAmount = Σ (labourCount * pricePerPerson) + transportCost
+ * Entries whose crop has no rate (or "Others" labor group) get pricePerPerson null
+ * and are listed in missingRateCrops.
+ */
+async function calculateLabourCost(request) {
+  const entries = request.cropEntries || [];
+  const cropIds = [
+    ...new Set(
+      entries
+        .map((e) => e.allotmentVillage?.allotment?.companyCrop?.cropId)
+        .filter(Boolean),
+    ),
+  ];
+
+  const rates =
+    request.laborGroupId && cropIds.length
+      ? await LaborGroupCropRate.findAll({
+          where: { laborGroupId: request.laborGroupId, cropId: cropIds },
+        })
+      : [];
+  const priceByCrop = new Map(
+    rates.map((r) => [r.cropId, Number(r.pricePerPerson)]),
+  );
+
+  const cropCosts = entries.map((e) => {
+    const crop = e.allotmentVillage?.allotment?.companyCrop?.crop;
+    const cropId =
+      crop?.id ?? e.allotmentVillage?.allotment?.companyCrop?.cropId;
+    const pricePerPerson = priceByCrop.has(cropId)
+      ? priceByCrop.get(cropId)
+      : null;
+    const labourCount = Number(e.labourCount) || 0;
+    return {
+      cropEntryId: e.id,
+      cropId,
+      cropName: crop?.name || null,
+      labourCount,
+      pricePerPerson,
+      subtotal: pricePerPerson !== null ? labourCount * pricePerPerson : 0,
+    };
+  });
+
+  const labourCostSubtotal = cropCosts.reduce((a, c) => a + c.subtotal, 0);
+  const transportCost = Number(request.transportCost) || 0;
+
+  return {
+    cropCosts,
+    labourCostSubtotal,
+    transportCost,
+    totalAmount: labourCostSubtotal + transportCost,
+    missingRateCrops: cropCosts
+      .filter((c) => c.pricePerPerson === null)
+      .map((c) => c.cropName),
+  };
+}
+
+/**
+ * Reads an optional transportCost from a request body.
+ * Returns undefined when not provided, null when invalid, else the number (≥ 0).
+ */
+function parseTransportCost(value) {
+  if (value === undefined || value === null || value === "") return undefined;
+  const cost = Number(value);
+  return Number.isFinite(cost) && cost >= 0 ? cost : null;
+}
+
 /** Shared list logic — `where` is built by the caller so "mine" vs "everyone's" can differ. */
 async function listLabourRequests(where, req, res, next) {
   try {
@@ -93,10 +169,7 @@ async function listLabourRequests(where, req, res, next) {
 
     const result = await LabourRequest.findAndCountAll({
       where,
-      include: [
-        ...HEADER_INCLUDES,
-        LIST_ENTRY_INCLUDE
-      ],
+      include: [...HEADER_INCLUDES, LIST_ENTRY_INCLUDE],
       order: [["createdAt", "DESC"]],
       limit,
       offset,
@@ -137,8 +210,13 @@ async function getLabourRequestById(req, res, next) {
     });
     if (!request) return error(res, 404, "Labour request not found");
 
+    const cost = await calculateLabourCost(request);
+
     return success(res, 200, "Labour request fetched successfully", {
-      data: request,
+      data: {
+        ...request.toJSON(),
+        cost,
+      },
     });
   } catch (err) {
     next(err);
@@ -434,12 +512,20 @@ async function verifyLabourRequest(req, res, next) {
       );
     }
 
-    const { laborGroupId } = req.body;
+    const { laborGroupId, transportCost } = req.body;
     const updates = {
       status: "verified",
       verifiedBy: req.employee.id,
       verifiedAt: new Date(),
     };
+
+    const parsedTransportCost = parseTransportCost(transportCost);
+    if (parsedTransportCost === null) {
+      return error(res, 400, "transportCost must be a number ≥ 0");
+    }
+    if (parsedTransportCost !== undefined) {
+      updates.transportCost = parsedTransportCost;
+    }
 
     if (laborGroupId !== undefined) {
       if (request.laborGroupId) {
@@ -460,11 +546,13 @@ async function verifyLabourRequest(req, res, next) {
     await request.update(updates);
 
     const updated = await LabourRequest.findByPk(id, {
-      include: HEADER_INCLUDES,
+      include: [...HEADER_INCLUDES, ENTRY_INCLUDE],
     });
+    const cost = await calculateLabourCost(updated);
 
     return success(res, 200, "Labour request verified successfully", {
       data: updated,
+      cost,
     });
   } catch (err) {
     next(err);
@@ -474,7 +562,9 @@ async function verifyLabourRequest(req, res, next) {
 /**
  * PUT /api/labour-requests/:id/approve — L1 action.
  * Computes the payment amount crop-wise: sum over every crop entry of
- * (labourCount * that crop's LaborGroupCropRate.pricePerPerson). If the
+ * (labourCount * that crop's LaborGroupCropRate.pricePerPerson), plus the
+ * transportCost. body: { transportCost? } — L1 may correct the transport
+ * cost L2 entered at verification; if omitted, L2's value is used. If the
  * request used "Others" instead of a real LaborGroup, there's no rate to
  * look up, so no payment is auto-created — flagged in the response instead.
  */
@@ -494,26 +584,26 @@ async function approveLabourRequest(req, res, next) {
       );
     }
 
+    const transportCost = parseTransportCost(req.body?.transportCost);
+    if (transportCost === null) {
+      return error(res, 400, "transportCost must be a number ≥ 0");
+    }
+
     await request.update({
       status: "approved",
       approvedBy: req.employee.id,
       approvedAt: new Date(),
+      ...(transportCost !== undefined && { transportCost }),
     });
 
     let payment = null;
     let paymentSkippedReason = null;
 
+    // Σ (labourCount * crop's pricePerPerson) across every allotment entry + transportCost
+    const cost = await calculateLabourCost(request);
+
     if (request.laborGroupId) {
-      let amount = 0;
-      for (const entry of request.cropEntries) {
-        const cropId = entry.allotmentVillage.allotment.companyCrop.cropId;
-        const rateRow = await LaborGroupCropRate.findOne({
-          where: { laborGroupId: request.laborGroupId, cropId },
-        });
-        if (rateRow) {
-          amount += Number(entry.labourCount) * Number(rateRow.pricePerPerson);
-        }
-      }
+      const amount = cost.totalAmount;
 
       if (amount > 0) {
         payment = await createPaymentIfNeeded({
@@ -523,13 +613,11 @@ async function approveLabourRequest(req, res, next) {
           recipientType: "labor_group",
           recipientId: request.laborGroupId,
           amount,
-          requestedBy: request.requestedBy,
-          verifiedBy: request.verifiedBy,
-          approvedBy: req.employee.id,
+          createdBy: req.employee.id,
         });
       } else {
         paymentSkippedReason =
-          "No crop-wise rate found for this labor group on the requested crop(s)";
+          "No crop-wise rate found for this labor group on the requested crop(s) and no transport cost";
       }
     } else {
       paymentSkippedReason =
@@ -542,6 +630,7 @@ async function approveLabourRequest(req, res, next) {
 
     return success(res, 200, "Labour request approved successfully", {
       data: updated,
+      cost,
       payment,
       paymentSkippedReason,
     });
@@ -586,7 +675,19 @@ async function rejectLabourRequest(req, res, next) {
   }
 }
 
+/**
+ * KPI cards — GET /my-summary (Requests page, own requests) and
+ * GET /summary (Verifications / Approvals pages, everyone's).
+ * Returns { total, pending, verified, approved, rejected }.
+ */
+const {
+  getMySummary: getMyLabourSummary,
+  getSummary: getLabourSummary,
+} = createSummaryHandlers(LabourRequest, ["pending", "verified", "approved", "rejected"], { label: "Labour request" });
+
 module.exports = {
+  getMyLabourSummary,
+  getLabourSummary,
   getMyLabourRequests,
   getAllLabourRequests,
   getLabourRequestById,

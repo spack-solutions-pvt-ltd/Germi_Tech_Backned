@@ -1,6 +1,7 @@
 "use strict";
 const { Router } = require("express");
 const {
+  getSeedCompanySummary,
   getAllSeedCompanies,
   getSeedCompanyById,
   createSeedCompany,
@@ -9,6 +10,7 @@ const {
 
 const router = Router();
 
+router.get("/summary", getSeedCompanySummary); // KPI cards — before /:seedCompanyId
 router.get("/", getAllSeedCompanies);
 router.get("/:seedCompanyId", getSeedCompanyById);
 router.post("/", createSeedCompany);

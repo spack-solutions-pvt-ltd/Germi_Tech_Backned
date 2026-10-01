@@ -22,6 +22,14 @@ function getPagination(query) {
 }
 
 /**
+ * True when the client asked for a page (sent page or limit). Endpoints use
+ * this to return the full paginated list vs. a lightweight dropdown list.
+ */
+function hasPagination(query) {
+  return query.page !== undefined || query.limit !== undefined;
+}
+
+/**
  * Wraps a Sequelize findAndCountAll() result ({ rows, count }) into a
  * consistent { data, meta } response shape.
  */
@@ -37,4 +45,4 @@ function buildPaginatedResponse({ rows, count }, page, limit) {
   };
 }
 
-module.exports = { getPagination, buildPaginatedResponse };
+module.exports = { getPagination, hasPagination, buildPaginatedResponse };

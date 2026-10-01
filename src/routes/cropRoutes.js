@@ -1,6 +1,7 @@
 "use strict";
 const { Router } = require("express");
 const {
+  getCropSummary,
   getAllCrops,
   getCropById,
   createCrop,
@@ -10,6 +11,7 @@ const {
 
 const router = Router();
 
+router.get("/summary", getCropSummary); // KPI cards — before /:cropId
 router.get("/", getAllCrops);
 router.get("/:cropId", getCropById);
 router.post("/", createCrop);

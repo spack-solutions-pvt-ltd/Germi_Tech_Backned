@@ -1,7 +1,41 @@
 "use strict";
 const { Router } = require("express");
-// const { requirePermission } = require("../middlewares/auth.middleware");
+const { loadingRequestUpload } = require("../middleWare/requestUpload.middleware");
+const { getMyAssignedAllotmentVillages } = require("../controller/allotmentController");
+const {
+  getMyLoadingRequests,
+  getAllLoadingRequests,
+  getMyLoadingSummary,
+  getLoadingSummary,
+  getLoadingRequestById,
+  getLoadingRequestPayments,
+  createLoadingRequest,
+  updateLoadingRequest,
+  updateLoadingAmounts,
+  verifyLoadingRequest,
+  cancelLoadingRequest,
+  createLoadingPayments,
+} = require("../controller/loadingRequestsController");
 
+// Access to each action is controlled by role permissions, not by level.
 const router = Router();
+
+// Requests → Loading (own requests)
+router.get("/my-requests", getMyLoadingRequests);
+router.get("/my-summary", getMyLoadingSummary);
+router.get("/allotment-villages", getMyAssignedAllotmentVillages); // "Allotment" dropdown
+
+// Verifications / Approvals
+router.get("/summary", getLoadingSummary);
+router.get("/", getAllLoadingRequests);
+
+router.get("/:id", getLoadingRequestById);
+router.get("/:id/payments", getLoadingRequestPayments);
+router.post("/", loadingRequestUpload, createLoadingRequest);
+router.put("/:id", loadingRequestUpload, updateLoadingRequest); // creator only, Pending only
+router.put("/:id/amounts", updateLoadingAmounts);
+router.put("/:id/verify", verifyLoadingRequest);
+router.put("/:id/cancel", cancelLoadingRequest);
+router.post("/:id/payments", createLoadingPayments); // transport | hamali | both
 
 module.exports = router;

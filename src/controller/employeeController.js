@@ -15,6 +15,7 @@ const {
 } = require("../utils/pagination");
 const { success, error } = require("../utils/response");
 const { generateId } = require("../utils/generateIds");
+const { createInsurancePaymentIfDue } = require("../utils/insurancePayments");
 const { welcomeEmailTemplate } = require("../templates/welcomeEmail");
 const fs = require("fs");
 const path = require("path");
@@ -207,8 +208,7 @@ async function createEmployee(req, res, next) {
             email,
             password: plainPassword,
             loginUrl:
-              process.env.FRONTEND_LOGIN_URL ||
-              "https://app.germitech.com/login",
+              process.env.FRONTEND_LOGIN_URL
           }),
         });
       } catch (mailErr) {
@@ -614,6 +614,8 @@ async function addEmployeeInsurance(req, res, next) {
       amount,
       updatedBy: req.employee?.id || null,
     });
+    // Already within 10 days of expiry? Raise the payment now instead of waiting for the job.
+    await createInsurancePaymentIfDue(insurance);
 
     return success(res, 201, "Insurance added successfully", {
       data: {
@@ -667,6 +669,7 @@ async function updateEmployeeInsurance(req, res, next) {
       ...(amount !== undefined && { amount }),
       updatedBy: req.employee?.id || null,
     });
+    await createInsurancePaymentIfDue(insurance);
 
     return success(res, 200, "Insurance updated successfully", {
       data: {

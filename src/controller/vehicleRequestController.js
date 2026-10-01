@@ -10,6 +10,7 @@ const {
   LogisticsPartner,
   Vehicle,
   Employee,
+  SeedCompany,
 } = require("../models");
 const {
   getPagination,
@@ -17,6 +18,7 @@ const {
 } = require("../utils/pagination");
 const { generateId } = require("../utils/generateIds");
 const { success, error } = require("../utils/response");
+const { createSummaryHandlers } = require("../utils/statusSummary");
 
 const INCLUDES = [
   {
@@ -38,7 +40,7 @@ const INCLUDES = [
       {
         model: Allotment,
         as: "allotment",
-        attributes: ["id", "allotmentCode", "companyId"],
+        attributes: ["id", "allotmentId", "companyId"],
         include: {
           model: CompanyCrop,
           as: "companyCrop",
@@ -64,28 +66,24 @@ const INCLUDES = [
 const listVehicleRequests = async (where, req, res, next) => {
   try {
     const { page, limit, offset } = getPagination(req.query);
-    const { status, village } = req.query;
-    if (status) where.status = status;
+    const { status, village, search } = req.query;
 
-    const include = INCLUDES;
-    // "village" filter needs to reach through allotmentVillage -> village,
-    // so it's applied as a nested where rather than a top-level column.
-    const includeWithVillageFilter = village
-      ? include.map((inc) =>
-          inc.as === "allotmentVillage"
-            ? {
-                ...inc,
-                include: inc.include.map((i) =>
-                  i.as === "village" ? { ...i, where: { name: village } } : i,
-                ),
-              }
-            : inc,
-        )
-      : include;
+    if (status) where.status = status;
+    if (search) where.requestCode = search;
+
+    // "village" is a Village id. A request points at an AllotmentVillage, so
+    // filter on the allotment-villages that belong to that village.
+    if (village) {
+      const allotmentVillages = await AllotmentVillage.findAll({
+        where: { villageId: village },
+        attributes: ["id"],
+      });
+      where.allotmentVillageId = allotmentVillages.map((av) => av.id);
+    }
 
     const result = await VehicleRequest.findAndCountAll({
       where,
-      include: includeWithVillageFilter,
+      include: INCLUDES,
       order: [["createdAt", "DESC"]],
       limit,
       offset,
@@ -132,7 +130,7 @@ async function getVehicleRequestById(req, res, next) {
     next(err);
   }
 }
-    
+
 /**
  * GET /api/vehicle-requests/warehouses/:allotmentVillageId
  */
@@ -155,6 +153,13 @@ async function getWarehousesForAllotmentVillage(req, res, next) {
 
     const warehouses = await Warehouse.findAll({
       where: { companyId: av.allotment.companyId },
+      include: [
+        {
+          model: SeedCompany,
+          as: "company",
+          attributes: ["id", "name", "companyId"],
+        },
+      ],
       order: [["locationName", "ASC"]],
     });
 
@@ -233,10 +238,7 @@ async function createVehicleRequest(req, res, next) {
       );
     }
 
-    const requestCode = await generateId(VehicleRequest, "VR");
-
     const request = await VehicleRequest.create({
-      requestCode,
       requestedBy,
       createdBy: req.employee.id,
       allotmentVillageId,
@@ -246,6 +248,8 @@ async function createVehicleRequest(req, res, next) {
       note,
       status: "pending",
     });
+    const requestCode = await generateId("VR", request?.id);
+    await request.update({ requestCode });
 
     const created = await VehicleRequest.findByPk(request.id, {
       include: INCLUDES,
@@ -434,7 +438,19 @@ async function cancelVehicleRequest(req, res, next) {
   }
 }
 
+/**
+ * KPI cards — GET /my-summary (Requests page, own requests) and
+ * GET /summary (Verifications / Approvals pages, everyone's).
+ * Returns { total, pending, inProcess, assigned, cancelled }.
+ */
+const {
+  getMySummary: getMyVehicleSummary,
+  getSummary: getVehicleSummary,
+} = createSummaryHandlers(VehicleRequest, ["pending", "in_process", "assigned", "cancelled"], { label: "Vehicle request" });
+
 module.exports = {
+  getMyVehicleSummary,
+  getVehicleSummary,
   getMyVehicleRequests,
   getAllVehicleRequests,
   getVehicleRequestById,

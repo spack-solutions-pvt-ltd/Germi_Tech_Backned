@@ -30,6 +30,9 @@ const indexRoutes = {
   expenseRequests:"/expense-requests",
   vehicleRequests:"/vehicle-requests",
   loadingRequests:"/loading-requests",
+  bagRequests:"/bag-requests",
+  bagTransfers:"/bag-transfers",
+  payments:"/payments",
   allFields:"/all-fields"
 };
 

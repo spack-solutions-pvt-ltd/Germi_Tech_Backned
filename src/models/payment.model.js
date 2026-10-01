@@ -2,27 +2,22 @@
 const { Model } = require("sequelize");
 
 module.exports = (sequelize, DataTypes) => {
-  // One normalized payment list fed by multiple sources (expense/labour/
-  // loading requests today; insurance later). sourceRequestType +
-  // sourceRequestId + recipientType together identify exactly which
-  // approval produced this row, so re-approving the same request can't
-  // create a duplicate payment (see the unique index below) — Loading is
-  // the one type that can legitimately spawn TWO payments (transport +
-  // hamali) from the same request, which is why recipientType is part of
-  // the uniqueness key, not just the source.
+  // One normalized payment list fed by multiple sources (expense / labour /
+  // loading requests, employee insurance). sourceRequestType +
+  // sourceRequestId + recipientType (+ periodKey) identify exactly which
+  // source produced this row, so the same source can't create a duplicate
+  // payment (see the unique index below) — Loading is the one source that
+  // legitimately spawns TWO payments (transport + hamali), which is why
+  // recipientType is part of the key.
+  //
+  // Lifecycle: created as pending (createdBy + createdAt) -> while pending
+  // the processing details (paymentMode, referenceId, paymentDate, remark)
+  // can be saved -> processed (processedBy + processedAt).
   class Payment extends Model {
     static associate(models) {
       this.belongsTo(models.Employee, {
-        foreignKey: "requestedBy",
-        as: "requester",
-      });
-      this.belongsTo(models.Employee, {
-        foreignKey: "verifiedBy",
-        as: "verifier",
-      });
-      this.belongsTo(models.Employee, {
-        foreignKey: "approvedBy",
-        as: "approver",
+        foreignKey: "createdBy",
+        as: "creator",
       });
       this.belongsTo(models.Employee, {
         foreignKey: "processedBy",
@@ -36,11 +31,12 @@ module.exports = (sequelize, DataTypes) => {
       paymentCode: DataTypes.STRING(30),
       type: {
         type: DataTypes.ENUM(
+          "supervisor",
           "labour",
-          "expense",
           "transport",
           "hamali",
           "insurance",
+          "expense",
         ),
         allowNull: false,
       },
@@ -49,12 +45,15 @@ module.exports = (sequelize, DataTypes) => {
           "labour_request",
           "expense_request",
           "loading_request",
+          "employee_insurance",
         ),
         allowNull: false,
       },
       sourceRequestId: { type: DataTypes.INTEGER, allowNull: false },
+      periodKey: { type: DataTypes.STRING(30), allowNull: false, defaultValue: "" },
       recipientType: {
         type: DataTypes.ENUM(
+          "supervisor",
           "employee",
           "labor_group",
           "logistics_partner",
@@ -65,36 +64,32 @@ module.exports = (sequelize, DataTypes) => {
       recipientId: DataTypes.INTEGER,
       recipientName: DataTypes.STRING(150), // snapshot name, used when there's no recipientId to join on (e.g. hamali gang)
       amount: { type: DataTypes.DECIMAL(12, 2), allowNull: false },
-      requestedBy: DataTypes.INTEGER,
-      verifiedBy: DataTypes.INTEGER,
-      approvedBy: DataTypes.INTEGER,
-      processedBy: DataTypes.INTEGER,
+      createdBy: DataTypes.INTEGER, // who created it (approver of the source request); null when system-created (insurance)
       status: {
         type: DataTypes.ENUM("pending", "processed"),
         allowNull: false,
         defaultValue: "pending",
       },
+      // Processing details — editable while pending.
       paymentMode: DataTypes.ENUM("bank", "upi", "cash"),
-      accountHolderName: DataTypes.STRING(150),
-      accountNumber: DataTypes.STRING(50),
-      ifscCode: DataTypes.STRING(20),
-      bankName: DataTypes.STRING(150),
-      upiId: DataTypes.STRING(100),
       referenceId: DataTypes.STRING(100),
       paymentDate: DataTypes.DATEONLY,
       remark: DataTypes.TEXT,
+      processedBy: DataTypes.INTEGER, // who marked it processed
+      processedAt: DataTypes.DATE,
     },
     {
       sequelize,
       modelName: "Payment",
       indexes: [
         {
+          name: "payments_source_unique",
           unique: true,
-          fields: ["sourceRequestType", "sourceRequestId", "recipientType"],
+          fields: ["sourceRequestType", "sourceRequestId", "recipientType", "periodKey"],
         },
       ],
     },
-  );
+  );  
 
   return Payment;
 };

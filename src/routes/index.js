@@ -21,6 +21,9 @@ const labourRequestRoutes = require("./labourRequestRoutes");
 const expenseRequestRoutes = require("./expenseRequestRoutes");
 const vehicleRequestRoutes = require("./vehicleRequestRoutes");
 const loadingRequestRoutes = require("./loadingRequestsRoutes");
+const bagRequestRoutes = require("./bagRequestsRoutes");
+const bagTransferRoutes = require("./bagTransferRoutes");
+const paymentRoutes = require("./paymentRoutes");
 const { getAllStates } = require("../controller/stateController");
 const { getAllNames } = require("../controller/allotmentController");
 
@@ -47,6 +50,9 @@ router.use(indexRoutes.labourRequests, authenticate, labourRequestRoutes);
 router.use(indexRoutes.expenseRequests, authenticate, expenseRequestRoutes);
 router.use(indexRoutes.vehicleRequests, authenticate, vehicleRequestRoutes);
 router.use(indexRoutes.loadingRequests, authenticate, loadingRequestRoutes);
+router.use(indexRoutes.bagRequests, authenticate, bagRequestRoutes);
+router.use(indexRoutes.bagTransfers, authenticate, bagTransferRoutes);
+router.use(indexRoutes.payments, authenticate, paymentRoutes);
 
 // Independent routes
 router.get(indexRoutes.states, authenticate, getAllStates);

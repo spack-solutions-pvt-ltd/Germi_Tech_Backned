@@ -36,32 +36,48 @@ const employeeDocumentUpload = upload.fields([
   { name: "other", maxCount: 1 },
 ]);
 
-// Single image attached to a broadcast notification.
+// Broadcast notification attachments: an optional image + an optional
+// downloadable document (pdf, word, excel, csv, powerpoint, text).
 const NOTIFICATION_UPLOAD_DIR = path.join(__dirname, "..", "uploads", "notifications");
 fs.mkdirSync(NOTIFICATION_UPLOAD_DIR, { recursive: true });
+
+// Checked by extension — browsers report office/csv MIME types inconsistently.
+const NOTIFICATION_FILE_TYPES = {
+  image: { extensions: [".jpg", ".jpeg", ".png", ".webp"], label: "JPEG, PNG or WEBP" },
+  document: {
+    extensions: [".pdf", ".doc", ".docx", ".xls", ".xlsx", ".csv", ".ppt", ".pptx", ".txt"],
+    label: "PDF, Word, Excel, CSV, PowerPoint or text",
+  },
+};
 
 const notificationStorage = multer.diskStorage({
   destination: (req, file, cb) => cb(null, NOTIFICATION_UPLOAD_DIR),
   filename: (req, file, cb) => {
-    const ext = path.extname(file.originalname);
-    cb(null, `notification-${Date.now()}${ext}`);
+    const ext = path.extname(file.originalname).toLowerCase();
+    const unique = `${Date.now()}-${Math.round(Math.random() * 1e9)}`;
+    cb(null, `notification-${file.fieldname}-${unique}${ext}`);
   },
 });
 
-const notificationImageUpload = multer({
+const notificationUpload = multer({
   storage: notificationStorage,
-  limits: { fileSize: 5 * 1024 * 1024 },
+  limits: { fileSize: 10 * 1024 * 1024 }, // 10MB per file
   fileFilter: (req, file, cb) => {
-    if (!ALLOWED_MIME_TYPES.includes(file.mimetype)) {
-      return cb(new Error("Only JPEG, PNG, WEBP or PDF files are allowed"));
+    const allowed = NOTIFICATION_FILE_TYPES[file.fieldname];
+    const ext = path.extname(file.originalname).toLowerCase();
+    if (!allowed || !allowed.extensions.includes(ext)) {
+      return cb(new Error(`${file.fieldname}: only ${allowed?.label || "known"} files are allowed`));
     }
     cb(null, true);
   },
-}).single("image");
+}).fields([
+  { name: "image", maxCount: 1 },
+  { name: "document", maxCount: 1 },
+]);
 
 module.exports = {
   employeeDocumentUpload,
-  notificationImageUpload,
+  notificationUpload,
   UPLOAD_DIR,
   NOTIFICATION_UPLOAD_DIR,
 };

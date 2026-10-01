@@ -7,7 +7,9 @@ const {
   Crop,
   Employee,
   State,
+  Allotment,
 } = require("../models");
+const { startOfCurrentMonth, resolveSeason } = require("../utils/periods");
 const {
   getPagination,
   buildPaginatedResponse,
@@ -185,7 +187,38 @@ const updateSeedCompany = async (req, res, next) => {
   }
 };
 
+/**
+ * GET /seed-company/summary?season=&year= — Seed companies page KPI cards.
+ * seasonRequirementAcres = sum of required acres (Allotment.reqAcres) of all
+ * company allotments in the season (current season unless ?season=&year= given).
+ */
+const getSeedCompanySummary = async (req, res, next) => {
+  try {
+    const season = resolveSeason(req.query);
+    const [totalCompanies, inactiveCompanies, newThisMonth, seasonRequirementAcres] = await Promise.all([
+      SeedCompany.count(),
+      SeedCompany.count({ where: { status: "Inactive" } }),
+      SeedCompany.count({ where: { createdAt: { [Op.gte]: startOfCurrentMonth() } } }),
+      Allotment.sum("reqAcres", { where: { season: season.season, year: season.year } }),
+    ]);
+
+    return success(res, 200, "Seed company summary fetched successfully", {
+      data: {
+        totalCompanies,
+        activeCompanies: totalCompanies - inactiveCompanies,
+        inactiveCompanies,
+        newThisMonth,
+        seasonRequirementAcres: Number(seasonRequirementAcres) || 0,
+        season: season.label,
+      },
+    });
+  } catch (err) {
+    next(err);
+  }
+};
+
 module.exports = {
+  getSeedCompanySummary,
   getAllSeedCompanies,
   getSeedCompanyById,
   createSeedCompany,

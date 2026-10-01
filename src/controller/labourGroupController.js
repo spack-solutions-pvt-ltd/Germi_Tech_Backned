@@ -5,6 +5,8 @@ const {
   LaborGroupCropRate,
   Crop,
   Employee,
+  Payment,
+  LabourRequest,
   sequelize,
 } = require("../models");
 const {
@@ -13,6 +15,7 @@ const {
 } = require("../utils/pagination");
 const { success, error } = require("../utils/response");
 const { generateId } = require("../utils/generateIds");
+const { startOfCurrentMonth, resolveSeason, toDateOnly } = require("../utils/periods");
 
 /** GET /api/labor-groups */
 async function getAllLaborGroups(req, res, next) {
@@ -306,7 +309,120 @@ async function updateLaborGroup(req, res, next) {
   }
 }
 
+const LABOUR_PAYMENT_WHERE = { type: "labour", recipientType: "labor_group" };
+const PERSON_ATTRS = ["id", "empId", "name", "level"];
+
+/** Sum of payment amounts matching `where` (0 when none). */
+async function sumPayments(where) {
+  return Number(await Payment.sum("amount", { where })) || 0;
+}
+
+/**
+ * GET /labour-groups/summary?season=&year= — Labour groups page KPI cards.
+ * wagesDue       = labour payments still pending
+ * paidThisSeason = labour payments processed with a payment date in the
+ *                  season (current season unless ?season=&year= is given)
+ */
+async function getLaborGroupSummary(req, res, next) {
+  try {
+    const season = resolveSeason(req.query);
+
+    const [totalGroups, addedThisMonth, wagesDue, pendingPayments, paidThisSeason] = await Promise.all([
+      LaborGroup.count(),
+      LaborGroup.count({ where: { createdAt: { [Op.gte]: startOfCurrentMonth() } } }),
+      sumPayments({ ...LABOUR_PAYMENT_WHERE, status: "pending" }),
+      Payment.count({ where: { ...LABOUR_PAYMENT_WHERE, status: "pending" } }),
+      sumPayments({
+        ...LABOUR_PAYMENT_WHERE,
+        status: "processed",
+        paymentDate: { [Op.gte]: toDateOnly(season.start), [Op.lt]: toDateOnly(season.end) },
+      }),
+    ]);
+
+    return success(res, 200, "Labour group summary fetched successfully", {
+      data: { totalGroups, addedThisMonth, wagesDue, pendingPayments, paidThisSeason, season: season.label },
+    });
+  } catch (err) {
+    next(err);
+  }
+}
+
+/**
+ * GET /labour-groups/:id/payments?page=&limit=&status=pending|processed
+ * Payments history for one labour group, plus its wagesDue (pending) and
+ * paidTotal (processed) for the details card.
+ * Each row: paymentCode, requestedBy (supervisor who raised the labour
+ * request), approvedBy (who created the payment), processedBy, amount,
+ * date, mode, status, sourceCode.
+ */
+async function getLaborGroupPayments(req, res, next) {
+  try {
+    const group = await LaborGroup.findByPk(req.params.id, { attributes: ["id"] });
+    if (!group) return error(res, 404, "Labour group not found");
+
+    const groupWhere = { recipientType: "labor_group", recipientId: group.id };
+    const where = { ...groupWhere };
+    if (["pending", "processed"].includes(req.query.status)) where.status = req.query.status;
+
+    const { page, limit, offset } = getPagination(req.query);
+    const [result, wagesDue, paidTotal] = await Promise.all([
+      Payment.findAndCountAll({
+        where,
+        include: [
+          { model: Employee, as: "creator", attributes: PERSON_ATTRS },
+          { model: Employee, as: "processor", attributes: PERSON_ATTRS },
+        ],
+        order: [["createdAt", "DESC"]],
+        limit,
+        offset,
+      }),
+      sumPayments({ ...groupWhere, status: "pending" }),
+      sumPayments({ ...groupWhere, status: "processed" }),
+    ]);
+
+    // "Requested by" = the supervisor on the labour request each payment came from.
+    const requestIds = result.rows
+      .filter((p) => p.sourceRequestType === "labour_request")
+      .map((p) => p.sourceRequestId);
+    const requests = requestIds.length
+      ? await LabourRequest.findAll({
+          where: { id: requestIds },
+          attributes: ["id", "requestCode"],
+          include: { model: Employee, as: "requester", attributes: PERSON_ATTRS },
+        })
+      : [];
+    const requestById = new Map(requests.map((r) => [r.id, r]));
+
+    const response = buildPaginatedResponse(result, page, limit);
+    response.data = result.rows.map((p) => {
+      const request = requestById.get(p.sourceRequestId);
+      return {
+        id: p.id,
+        paymentCode: p.paymentCode,
+        sourceCode: request?.requestCode || null,
+        requestedBy: request?.requester || null,
+        approvedBy: p.creator,
+        processedBy: p.processor,
+        amount: p.amount,
+        status: p.status,
+        paymentMode: p.paymentMode,
+        referenceId: p.referenceId,
+        date: p.status === "processed" ? p.paymentDate : p.createdAt,
+        createdAt: p.createdAt,
+        processedAt: p.processedAt,
+      };
+    });
+    response.totals = { wagesDue, paidTotal };
+
+    return success(res, 200, "Labour group payments fetched successfully", response);
+  } catch (err) {
+    next(err);
+  }
+}
+
 module.exports = {
+  getLaborGroupSummary,
+  getLaborGroupPayments,
   getAllLaborGroups,
   getLaborGroupById,
   createLaborGroup,

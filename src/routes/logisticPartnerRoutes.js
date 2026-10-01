@@ -1,6 +1,7 @@
 "use strict";
 const { Router } = require("express");
 const {
+  getLogisticsSummary,
   getAllLogisticsPartners,
   getLogisticsPartnerById,
   createLogisticsPartner,
@@ -15,6 +16,7 @@ const {
 
 const router = Router();
 
+router.get("/summary", getLogisticsSummary); // KPI cards — before /:id
 router.get("/", getAllLogisticsPartners);
 router.get("/:id", getLogisticsPartnerById);
 router.post("/", createLogisticsPartner);

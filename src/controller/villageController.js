@@ -1,6 +1,7 @@
 "use strict";
 const { Op } = require("sequelize");
-const { Village, SubOrganizer, Employee } = require("../models");
+const { Village, SubOrganizer, Employee, AllotmentVillage, Allotment } = require("../models");
+const { startOfCurrentMonth, resolveSeason } = require("../utils/periods");
 const {
   getPagination,
   buildPaginatedResponse,
@@ -165,7 +166,47 @@ const updatevillageStatusById = async (req, res, next) => {
     next(error);
   }
 };
+/**
+ * GET /village/summary?season=&year= — Villages page KPI cards.
+ * acresMapped = allotted acres across every village allotment whose
+ * allotment is in the season (current season unless ?season=&year= given).
+ */
+const getVillageSummary = async (req, res, next) => {
+  try {
+    const season = resolveSeason(req.query);
+    const [totalVillages, inactiveVillages, newThisMonth, acresMapped] = await Promise.all([
+      Village.count(),
+      Village.count({ where: { status: "Inactive" } }),
+      Village.count({ where: { createdAt: { [Op.gte]: startOfCurrentMonth() } } }),
+      AllotmentVillage.sum("allottedAcres", {
+        include: [
+          {
+            model: Allotment,
+            as: "allotment",
+            attributes: [],
+            where: { season: season.season, year: season.year },
+          },
+        ],
+      }),
+    ]);
+
+    return success(res, 200, "Village summary fetched successfully", {
+      data: {
+        totalVillages,
+        activeVillages: totalVillages - inactiveVillages,
+        inactiveVillages,
+        newThisMonth,
+        acresMapped: Number(acresMapped) || 0,
+        season: season.label,
+      },
+    });
+  } catch (err) {
+    next(err);
+  }
+};
+
 module.exports = {
+  getVillageSummary,
   getAllVillages,
   getVillageById,
   createVillage,

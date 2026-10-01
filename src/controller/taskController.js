@@ -395,6 +395,7 @@ async function updateTask(req, res, next) {
       ...(taskTypeId !== undefined && { taskTypeId }),
       ...(description !== undefined && { description }),
       ...(dueDate !== undefined && { dueDate }),
+      ...({ status:"Pending" }),
     });
 
     const updated = await Task.findByPk(task.id, { include: TASK_INCLUDES });

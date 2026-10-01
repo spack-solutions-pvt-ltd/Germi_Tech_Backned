@@ -37,7 +37,8 @@ module.exports = (sequelize, DataTypes) => {
       billUrl: DataTypes.STRING(500),
       note: DataTypes.TEXT,
       status: {
-        type: DataTypes.ENUM("pending", "verified", "approved", "rejected"),
+        // paid = its Payment has been processed (set by the payments module)
+        type: DataTypes.ENUM("pending", "verified", "approved", "rejected", "paid"),
         allowNull: false,
         defaultValue: "pending",
       },

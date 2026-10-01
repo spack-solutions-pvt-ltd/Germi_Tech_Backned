@@ -9,4 +9,11 @@ function error(res, statusCode, message) {
   return res.status(statusCode).json({ success: false, message });
 }
 
-module.exports = { success, error };
+/** An Error the error middleware turns into `statusCode` + message — handy inside transactions. */
+function httpError(statusCode, message) {
+  const err = new Error(message);
+  err.statusCode = statusCode;
+  return err;
+}
+
+module.exports = { success, error, httpError };

@@ -33,6 +33,7 @@ module.exports = (sequelize, DataTypes) => {
       startPhotoUrl: DataTypes.STRING(500),
       endPhotoUrl: DataTypes.STRING(500),
       transportType: DataTypes.ENUM("full_day", "half_day", "up_and_down"),
+      transportCost: { type: DataTypes.DECIMAL(10, 2), allowNull: false, defaultValue: 0 }, // set by L2 at verification, added to the payment at approval
       notes: DataTypes.TEXT,
       status: {
         type: DataTypes.ENUM("pending", "verified", "approved", "rejected"),

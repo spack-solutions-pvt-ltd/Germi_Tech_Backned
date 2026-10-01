@@ -2,6 +2,8 @@
 const { Router } = require("express");
 const {
   getMyLabourRequests,
+  getMyLabourSummary,
+  getLabourSummary,
   getAllLabourRequests,
   getLabourRequestById,
   createLabourRequest,
@@ -20,6 +22,8 @@ const router = Router();
 router.get("/my-requests", getMyLabourRequests); //my requests
 router.get("/allotment-villages",getMyAssignedAllotmentVillages)
 router.get("/", getAllLabourRequests); //verifications and approvals 
+router.get("/my-summary", getMyLabourSummary); // Requests page KPIs (own)
+router.get("/summary", getLabourSummary); // Verifications / Approvals KPIs (all)
 router.get("/:id", getLabourRequestById); 
 router.post("/", labourRequestUpload, createLabourRequest);
 router.put("/:id", labourRequestUpload, updateLabourRequest);

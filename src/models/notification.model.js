@@ -23,6 +23,9 @@ module.exports = (sequelize, DataTypes) => {
       },
       message: { type: DataTypes.TEXT, allowNull: false },
       imageUrl: DataTypes.STRING(500),
+      // Optional downloadable attachment (pdf, doc/docx, xls/xlsx, csv, ...).
+      documentUrl: DataTypes.STRING(500),
+      documentName: DataTypes.STRING(255), // original file name, used as the download name
     },
     {
       sequelize,

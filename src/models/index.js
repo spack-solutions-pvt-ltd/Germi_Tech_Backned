@@ -38,16 +38,16 @@ Object.keys(db).forEach(modelName => {
 });
 
 db.sequelize = sequelize;
-db.Sequelize = Sequelize;
+db.Sequelize = Sequelize; 
 
 
-// (async () => {
-//   try {
-//     await sequelize.sync({ alter: true });
-//     console.log("Data base sync Success")
-//   } catch (error) {
-//     console.log(error);
-//   }
-// })();
+(async () => {
+  try {
+    await sequelize.sync({ alter: true });
+    console.log("Data base sync Success")
+  } catch (error) {
+    console.log(error);
+  }
+})();
 
 module.exports = db;

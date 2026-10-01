@@ -2,6 +2,8 @@
 const { Router } = require("express");
 const {
   getMyExpenseRequests,
+  getMyExpenseSummary,
+  getExpenseSummary,
   getAllExpenseRequests,
   getExpenseRequestById,
   createExpenseRequest,
@@ -18,6 +20,8 @@ const router = Router();
 
 router.get("/my-requests", getMyExpenseRequests);
 router.get("/", getAllExpenseRequests);
+router.get("/my-summary", getMyExpenseSummary); // Requests page KPIs (own)
+router.get("/summary", getExpenseSummary); // Verifications / Approvals KPIs (all)
 router.get("/:id", getExpenseRequestById);
 router.post("/", expenseRequestUpload, createExpenseRequest);
 router.put("/:id", expenseRequestUpload, updateExpenseRequest); // only while status = pending

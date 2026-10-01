@@ -84,8 +84,22 @@ function requirePermission(code) {
     }
   };
 }
+/** Allows only employees whose level is in `levels`, e.g. requireLevel("L1", "L2"). */
+function requireLevel(...levels) {
+  return (req, res, next) => {
+    if (!req.employee || !levels.includes(req.employee.level)) {
+      return res.status(403).json({
+        success: false,
+        message: "You don't have permission to do this",
+      });
+    }
+    next();
+  };
+}
+
 module.exports = {
   authenticate,
+  requireLevel,
   getEffectivePermissionCodes,
   requirePermission,
 };

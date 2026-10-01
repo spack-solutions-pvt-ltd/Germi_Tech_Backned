@@ -1,4 +1,6 @@
 "use strict";
+const path = require("path");
+const fs = require("fs");
 const { Op } = require("sequelize");
 const {
   sequelize,
@@ -12,6 +14,42 @@ const {
 } = require("../utils/pagination");
 const { success, error } = require("../utils/response");
 const { generateId } = require("../utils/generateIds");
+const { NOTIFICATION_UPLOAD_DIR } = require("../middleWare/upload.middleware");
+
+const UPLOAD_URL = "/uploads/notifications";
+const SENDER_INCLUDE = {
+  model: Employee,
+  as: "sender",
+  attributes: ["id", "empId", "name", "level"],
+};
+
+/**
+ * Attachment columns from the uploaded files (image + document). Only
+ * includes what was actually uploaded, so an update keeps existing files.
+ */
+function attachmentFields(files = {}) {
+  const image = files.image?.[0];
+  const document = files.document?.[0];
+  return {
+    ...(image && { imageUrl: `${UPLOAD_URL}/${image.filename}` }),
+    ...(document && {
+      documentUrl: `${UPLOAD_URL}/${document.filename}`,
+      documentName: document.originalname,
+    }),
+  };
+}
+
+/** Search on message / notification ID — shared by the admin and "my" lists. */
+function searchWhere(search) {
+  if (!search) return {};
+  const term = `%${search.trim()}%`;
+  return {
+    [Op.or]: [
+      { message: { [Op.like]: term } },
+      { notificationId: { [Op.like]: term } },
+    ],
+  };
+}
 
 /**
  * Card counts for the list page:
@@ -51,24 +89,7 @@ const getAllNotifications = async (req, res, next) => {
     const { search, toLevel } = req.query;
     const { page, limit, offset } = getPagination(req.query);
 
-    const where = {};
-
-    if (search) {
-      const term = `%${search.trim()}%`;
-
-      where[Op.or] = [
-        {
-          message: {
-            [Op.like]: term,
-          },
-        },
-        {
-          notificationId: {
-            [Op.like]: term,
-          },
-        },
-      ];
-    }
+    const where = searchWhere(search);
 
     if (toLevel) {
       where.toLevel = toLevel;
@@ -161,8 +182,75 @@ const getNotificationById = async (req, res, next) => {
 };
 
 /**
- * POST /api/notifications (multipart/form-data if an image is attached)
- * fields: toLevel ('L1'|'L2'|'L3'|'All'), message, image (optional file)
+ * GET /api/notifications/my-notifications?search=&page=&limit=
+ * Notifications for the logged-in user's level: sent to their level or to
+ * "All". Each row says whether they have already responded.
+ */
+const getMyNotifications = async (req, res, next) => {
+  try {
+    const { page, limit, offset } = getPagination(req.query);
+    const where = {
+      ...searchWhere(req.query.search),
+      toLevel: { [Op.in]: [req.employee.level, "All"] },
+    };
+
+    const result = await Notification.findAndCountAll({
+      where,
+      include: [SENDER_INCLUDE],
+      attributes: {
+        include: [
+          [
+            sequelize.literal(`EXISTS (
+              SELECT 1 FROM \`NotificationResponses\` AS nr
+              WHERE nr.notificationId = \`Notification\`.id
+                AND nr.respondedBy = ${sequelize.escape(req.employee.id)}
+            )`),
+            "respondedByMe",
+          ],
+        ],
+      },
+      order: [["createdAt", "DESC"]],
+      limit,
+      offset,
+    });
+
+    const response = buildPaginatedResponse(result, page, limit);
+    response.data = result.rows.map((row) => {
+      const json = row.toJSON();
+      return { ...json, respondedByMe: Boolean(Number(json.respondedByMe)) };
+    });
+    return success(res, 200, "Notifications fetched successfully", response);
+  } catch (err) {
+    next(err);
+  }
+};
+
+/**
+ * GET /api/notifications/:id/document — downloads the attached document
+ * under its original file name.
+ */
+const downloadNotificationDocument = async (req, res, next) => {
+  try {
+    const notification = await Notification.findByPk(req.params.id, {
+      attributes: ["id", "documentUrl", "documentName"],
+    });
+    if (!notification) return error(res, 404, "Notification not found");
+    if (!notification.documentUrl) return error(res, 404, "This notification has no document");
+
+    // Resolve from the stored file name only, so the path can't escape the uploads folder.
+    const filePath = path.join(NOTIFICATION_UPLOAD_DIR, path.basename(notification.documentUrl));
+    if (!fs.existsSync(filePath)) return error(res, 404, "Document file is missing on the server");
+
+    return res.download(filePath, notification.documentName || path.basename(filePath));
+  } catch (err) {
+    next(err);
+  }
+};
+
+/**
+ * POST /api/notifications (multipart/form-data if a file is attached)
+ * fields: toLevel ('L1'|'L2'|'L3'|'All'), message,
+ *         image (optional image), document (optional pdf/word/excel/csv/... file)
  */
 const createNotification = async (req, res, next) => {
   try {
@@ -178,15 +266,11 @@ const createNotification = async (req, res, next) => {
     }
     if (!message) return error(res, 400, "message is required");
 
-    const imageUrl = req.file
-      ? `/uploads/notifications/${req.file.filename}`
-      : null;
-
     const notification = await Notification.create({
       sentBy: req.employee.id,
       toLevel,
       message,
-      imageUrl,
+      ...attachmentFields(req.files),
     });
     const notificationId = generateId("NT", notification.id);
     await notification.update({ notificationId });
@@ -239,14 +323,10 @@ const updateNotification = async (req, res, next) => {
       return error(res, 400, "toLevel must be one of L1, L2, L3, All");
     }
 
-    const imageUrl = req.file
-      ? `/uploads/notifications/${req.file.filename}`
-      : undefined;
-
     await notification.update({
       ...(toLevel !== undefined && { toLevel }),
       ...(message !== undefined && { message }),
-      ...(imageUrl !== undefined && { imageUrl }),
+      ...attachmentFields(req.files), // a new image/document replaces the old one
     });
 
     return success(res, 200, "Notification updated successfully", {
@@ -341,6 +421,8 @@ const createNotificationResponse = async (req, res, next) => {
 
 module.exports = {
   getAllNotifications,
+  getMyNotifications,
+  downloadNotificationDocument,
   getNotificationById,
   createNotification,
   updateNotification,

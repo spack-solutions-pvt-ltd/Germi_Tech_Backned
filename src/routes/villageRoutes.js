@@ -1,6 +1,7 @@
 "use strict";
 const { Router } = require("express");
 const {
+  getVillageSummary,
   getAllVillages,
   getVillageById,
   createVillage,
@@ -14,6 +15,7 @@ const {
 const router = Router();
 
 router.post("/", createVillage);
+router.get("/summary", getVillageSummary); // KPI cards — before /:villageId
 router.get("/", getAllVillages);
 router.get("/:villageId", getVillageById);
 router.put("/:villageId", updateVillage);

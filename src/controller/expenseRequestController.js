@@ -6,7 +6,9 @@ const {
 } = require("../utils/pagination");
 const { generateId } = require("../utils/generateIds");
 const { success, error } = require("../utils/response");
+const { createSummaryHandlers } = require("../utils/statusSummary");
 const { createPaymentIfNeeded } = require("../utils/createPayment");
+const { Op } = require("sequelize");
 
 const INCLUDES = [
   {
@@ -14,16 +16,28 @@ const INCLUDES = [
     as: "requester",
     attributes: ["id", "empId", "name", "level"],
   },
-  { model: Employee, as: "verifier", attributes: ["id", "empId", "name"] },
-  { model: Employee, as: "approver", attributes: ["id", "empId", "name"] },
+  { model: Employee, as: "verifier", attributes: ["id", "empId", "name","level"] },
+  { model: Employee, as: "approver", attributes: ["id", "empId", "name","level"] },
+  { model: Employee, as: "rejecter", attributes: ["id", "empId", "name","level"] },
 ];
 
 /** Shared list logic — `where` is built by the caller so "mine" vs "everyone's" can differ. */
 async function listExpenseRequests(where, req, res, next) {
   try {
     const { page, limit, offset } = getPagination(req.query);
-    const { status } = req.query;
-    if (status) where.status = status;
+    const { status, search } = req.query;
+
+    if (status) {
+      where.status = status;
+    }
+
+    if (search?.trim()) {
+      const searchTerm = `%${search.trim()}%`;
+      where[Op.or] = [
+        { requestCode: { [Op.like]: searchTerm } },
+        { purpose: { [Op.like]: searchTerm } },
+      ];
+    }
 
     const result = await ExpenseRequest.findAndCountAll({
       where,
@@ -214,15 +228,13 @@ async function approveExpenseRequest(req, res, next) {
     });
 
     const payment = await createPaymentIfNeeded({
-      type: "expense",
+      type: "supervisor",
       sourceRequestType: "expense_request",
       sourceRequestId: request.id,
-      recipientType: "employee",
+      recipientType: "supervisor",
       recipientId: request.requestedBy,
       amount: request.amount,
-      requestedBy: request.requestedBy,
-      verifiedBy: request.verifiedBy,
-      approvedBy: req.employee.id,
+      createdBy: req.employee.id,
     });
 
     const updated = await ExpenseRequest.findByPk(id, { include: INCLUDES });
@@ -245,7 +257,7 @@ async function rejectExpenseRequest(req, res, next) {
     const request = await ExpenseRequest.findByPk(id);
     if (!request) return error(res, 404, "Expense request not found");
 
-    if (["approved", "rejected"].includes(request.status)) {
+    if (["approved", "rejected", "paid"].includes(request.status)) {
       return error(
         res,
         409,
@@ -269,7 +281,19 @@ async function rejectExpenseRequest(req, res, next) {
   }
 }
 
+/**
+ * KPI cards — GET /my-summary (Requests page, own requests) and
+ * GET /summary (Verifications / Approvals pages, everyone's).
+ * Returns { total, pending, verified, approved, rejected, paid }.
+ */
+const {
+  getMySummary: getMyExpenseSummary,
+  getSummary: getExpenseSummary,
+} = createSummaryHandlers(ExpenseRequest, ["pending", "verified", "approved", "rejected", "paid"], { label: "Expense request" });
+
 module.exports = {
+  getMyExpenseSummary,
+  getExpenseSummary,
   getMyExpenseRequests,
   getAllExpenseRequests,
   getExpenseRequestById,
