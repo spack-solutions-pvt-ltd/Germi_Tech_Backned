@@ -22,7 +22,11 @@ const {
   toPositiveInt,
   toNonNegativeInt,
 } = require("../utils/bagsCommon");
-const { resolveRequestOwner, assertRequestOwner } = require("../utils/requestOwnership");
+const {
+  resolveRequestOwner,
+  assertRequestOwner,
+  isRequestOwner,
+} = require("../utils/requestOwnership");
 
 // Allowed transitions. There is no Approval-page stage for bags. A request
 // can be cancelled at any stage until it is received; a "received" request
@@ -67,18 +71,35 @@ function parseCropEntries(raw) {
 }
 
 /** Adds bag totals across the crop entries. */
+// Statuses where the current dispatch (sentBags) is still on the way.
+const IN_TRANSIT_STATUSES = ["bags_sent", "not_received"];
+
+/**
+ * Per crop entry and in total:
+ *   requiredBags  — asked for (L2 may correct)
+ *   sentBags      — the current / last dispatch quantity (set at In process)
+ *   receivedBags  — confirmed received by the supervisor, cumulative
+ *   inTransitBags — sentBags while the dispatch is Bags sent / Not received, else 0
+ *   remainingBags — requiredBags - receivedBags - inTransitBags (never below 0)
+ */
 function decorate(request) {
   const json = request.toJSON();
   if (!json.cropEntries) return json;
+  const inTransit = IN_TRANSIT_STATUSES.includes(json.status);
   const sum = (key) =>
     json.cropEntries.reduce((acc, e) => acc + (e[key] || 0), 0);
-  json.cropEntries = json.cropEntries.map((e) => ({
-    ...e,
-    remainingBags: Math.max(e.requiredBags - e.receivedBags - e.sentBags, 0),
-  }));
+  json.cropEntries = json.cropEntries.map((e) => {
+    const inTransitBags = inTransit ? e.sentBags : 0;
+    return {
+      ...e,
+      inTransitBags,
+      remainingBags: Math.max(e.requiredBags - e.receivedBags - inTransitBags, 0),
+    };
+  });
   json.totalRequiredBags = sum("requiredBags");
   json.totalSentBags = sum("sentBags");
   json.totalReceivedBags = sum("receivedBags");
+  json.totalInTransitBags = sum("inTransitBags");
   json.remainingBags = sum("remainingBags");
   return json;
 }
@@ -435,10 +456,10 @@ function applyEntryUpdates(entries, entryUpdates) {
  * PUT /bag-requests/:id/status
  * body: { status, note?, reason?, cropEntries? }
  *
- * pending → in_process                    L1/L2 — may correct requiredBags: cropEntries [{ id, requiredBags }]
- * in_process | received → bags_sent       L1/L2 — cropEntries [{ id, sentBags, requiredBags? }] (any quantity)
- * not_received → bags_sent                L1/L2 — re-dispatch; cropEntries optional (keeps last quantities)
- * bags_sent → received                    requesting supervisor — sent bags are added to their allotment balance
+ * pending → in_process                    L1/L2 — cropEntries [{ id, sentBags, requiredBags? }]: the quantity being sent (any amount)
+ * in_process | not_received → bags_sent   L1/L2 — dispatches the saved sentBags; cropEntries optional (overrides)
+ * received → bags_sent                    L1/L2 — a new dispatch; cropEntries [{ id, sentBags }] required
+ * bags_sent → received                    requesting supervisor — sentBags are added to receivedBags and their allotment balance
  * bags_sent → not_received                requesting supervisor — nothing added
  * pending | in_process | bags_sent | not_received → cancelled   requester / creator / L1/L2
  */
@@ -471,33 +492,37 @@ async function updateBagsRequestStatus(req, res, next) {
       const updates = { status: toStatus };
       let bagsCount = null;
 
-      if (toStatus === "in_process" && entryUpdates) {
+      // in_process: L2 sets the quantity being dispatched (sentBags, any
+      // amount — less or more than required) and may correct requiredBags.
+      if (toStatus === "in_process") {
         const entries = await lockEntries(request, t);
-        applyEntryUpdates(
-          entries,
-          entryUpdates.map(({ id, requiredBags }) => ({ id, requiredBags })),
-        );
-        await Promise.all(entries.map((e) => e.save({ transaction: t })));
-      }
-
-      if (toStatus === "bags_sent") {
-        if (!entryUpdates && fromStatus !== "not_received") {
-          throw httpError(
-            400,
-            "cropEntries with sentBags are required to mark bags sent",
-          );
-        }
-        const entries = await lockEntries(request, t);
-        // A fresh dispatch starts from zero; a re-dispatch after not_received keeps the last quantities.
-        if (fromStatus !== "not_received")
-          entries.forEach((e) => (e.sentBags = 0));
         applyEntryUpdates(entries, entryUpdates);
         bagsCount = entries.reduce((a, e) => a + e.sentBags, 0);
-        if (bagsCount <= 0)
-          throw httpError(400, "At least one bag must be sent");
         await Promise.all(entries.map((e) => e.save({ transaction: t })));
       }
 
+      // bags_sent: dispatches the quantity saved at in_process (or at the last
+      // dispatch, for not_received). cropEntries is optional and only overrides.
+      // A follow-up dispatch after "received" starts from zero and needs cropEntries.
+      if (toStatus === "bags_sent") {
+        const entries = await lockEntries(request, t);
+        if (fromStatus === "received") {
+          if (!entryUpdates) {
+            throw httpError(400, "cropEntries with sentBags are required for a new dispatch");
+          }
+          entries.forEach((e) => (e.sentBags = 0));
+        }
+        applyEntryUpdates(entries, entryUpdates);
+        bagsCount = entries.reduce((a, e) => a + e.sentBags, 0);
+        if (bagsCount <= 0) {
+          throw httpError(400, "Set sentBags (at In process or here) — at least one bag must be sent");
+        }
+        await Promise.all(entries.map((e) => e.save({ transaction: t })));
+      }
+
+      // received: the dispatched bags are added to the supervisor's allotment
+      // balance and to receivedBags. sentBags is kept as the record of what
+      // this dispatch contained.
       if (toStatus === "received") {
         const entries = await lockEntries(request, t);
         bagsCount = 0;
@@ -513,7 +538,6 @@ async function updateBagsRequestStatus(req, res, next) {
           );
           bagsCount += entry.sentBags;
           entry.receivedBags += entry.sentBags;
-          entry.sentBags = 0;
           await entry.save({ transaction: t });
         }
       }

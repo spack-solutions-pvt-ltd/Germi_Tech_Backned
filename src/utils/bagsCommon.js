@@ -6,7 +6,13 @@ const { AllotmentVillage, Allotment, CompanyCrop, Crop, Village } = require("../
 const PROCESSOR_LEVELS = ["L1", "L2"]; // who dispatches requests / confirms company returns
 const EMP_ATTRS = ["id", "empId", "name", "level"];
 
-const AV_DETAIL_INCLUDE = [
+// Include trees are built fresh on every call: Sequelize mutates include
+// objects while building a query, so sharing one object between two
+// associations (e.g. fromAllotmentVillage + toAllotmentVillage) makes both
+// emit the same alias -> "Not unique table/alias".
+
+/** village + allotment -> companyCrop -> crop, for an AllotmentVillage. */
+const avDetailInclude = () => [
   { model: Village, as: "village", attributes: ["id", "name"] },
   {
     model: Allotment,
@@ -26,10 +32,10 @@ const allotmentVillageInclude = (as) => ({
   model: AllotmentVillage,
   as,
   attributes: ["id", "villageId", "supervisorId"],
-  include: AV_DETAIL_INCLUDE,
+  include: avDetailInclude(),
 });
 
-/** Flattens an AllotmentVillage (loaded with AV_DETAIL_INCLUDE) into a dropdown option. */
+/** Flattens an AllotmentVillage (loaded with avDetailInclude()) into a dropdown option. */
 const toAllotmentOption = (av) => ({
   allotmentVillageId: av.id,
   allotmentId: av.allotment?.allotmentId,
@@ -52,7 +58,7 @@ function toNonNegativeInt(value) {
 
 module.exports = {
   EMP_ATTRS,
-  AV_DETAIL_INCLUDE,
+  avDetailInclude,
   allotmentVillageInclude,
   toAllotmentOption,
   isProcessor,

@@ -26,7 +26,7 @@ module.exports = (sequelize, DataTypes) => {
 
   BagsRequest.init(
     {
-      requestCode: { type: DataTypes.STRING(30), unique: true }, // e.g. BR-0001, set right after insert
+      requestCode: { type: DataTypes.STRING, unique: true }, // e.g. BR-0001, set right after insert
       requestedBy: DataTypes.INTEGER, // the supervisor the bags are for
       createdBy: DataTypes.INTEGER, // who actually submitted it — differs when L1/L2 create it on a supervisor's behalf
       status: {
@@ -41,10 +41,10 @@ module.exports = (sequelize, DataTypes) => {
         allowNull: false,
         defaultValue: "pending",
       },
-      note: DataTypes.TEXT,
+      note: DataTypes.STRING,
       cancelledBy: DataTypes.INTEGER,
       cancelledAt: DataTypes.DATE,
-      cancellationReason: DataTypes.TEXT,
+      cancellationReason: DataTypes.STRING,
     },
     {
       sequelize,

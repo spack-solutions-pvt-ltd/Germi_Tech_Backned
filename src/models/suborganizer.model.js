@@ -24,7 +24,7 @@ module.exports = (sequelize, DataTypes) => {
       subOrganizerId: DataTypes.STRING(30),
       villageId: DataTypes.INTEGER,
       name: DataTypes.STRING(150),
-      number: DataTypes.STRING(15),
+      number: DataTypes.STRING,
       acres: DataTypes.DECIMAL(10, 2),
       createdBy: DataTypes.INTEGER,
       status: {

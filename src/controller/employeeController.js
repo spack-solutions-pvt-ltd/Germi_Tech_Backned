@@ -19,6 +19,8 @@ const { createInsurancePaymentIfDue } = require("../utils/insurancePayments");
 const { welcomeEmailTemplate } = require("../templates/welcomeEmail");
 const fs = require("fs");
 const path = require("path");
+const { signedUrl, keyFromStored, deleteStoredFile } = require("../utils/s3");
+const { LEGACY_UPLOAD_ROOT } = require("../middleWare/upload.middleware");
 
 const DOCUMENT_LABELS = {
   aadhaar_card: "Aadhaar Card",
@@ -36,6 +38,27 @@ const INSURANCE_LABELS = {
 
 function documentDisplayName(doc) {
   return doc.type === "other" ? doc.label : DOCUMENT_LABELS[doc.type];
+}
+
+// Employee documents are private: fileUrl stores the S3 key (or a legacy
+// /uploads path). viewUrl is what the UI opens — a signed S3 link valid for
+// DOCUMENT_LINK_SECONDS, or the legacy path for files uploaded before S3.
+const DOCUMENT_LINK_SECONDS = 300;
+
+async function documentViewUrl(fileUrl) {
+  const key = keyFromStored(fileUrl);
+  return key ? signedUrl(key, { expiresIn: DOCUMENT_LINK_SECONDS }) : fileUrl || null;
+}
+
+/** EmployeeDocument (instance or plain object) -> response shape. */
+async function withDocumentLinks(doc) {
+  const json = typeof doc.toJSON === "function" ? doc.toJSON() : doc;
+  return {
+    ...json,
+    displayName: documentDisplayName(json),
+    viewUrl: await documentViewUrl(json.fileUrl),
+    viewUrlExpiresIn: keyFromStored(json.fileUrl) ? DOCUMENT_LINK_SECONDS : null,
+  };
 }
 
 function insuranceDisplayType(ins) {
@@ -132,10 +155,7 @@ async function getEmployeeById(req, res, next) {
     if (!employee) return error(res, 404, "Employee not found");
 
     const payload = employee.toJSON();
-    payload.documents = payload.documents.map((d) => ({
-      ...d,
-      displayName: documentDisplayName(d),
-    }));
+    payload.documents = await Promise.all(payload.documents.map(withDocumentLinks));
     payload.insurances = payload.insurances.map((i) => ({
       ...i,
       displayType: insuranceDisplayType(i),
@@ -401,7 +421,7 @@ async function addEmployeeDocument(req, res, next) {
       return error(res, 400, "A document file is required");
     }
 
-    const fileUrl = `/uploads/employee-documents/${req.file.filename}`;
+    const fileUrl = req.file.key; // private S3 key (employee-documents/...) — never a public URL
 
     const document = await EmployeeDocument.create({
       employeeId: id,
@@ -414,10 +434,7 @@ async function addEmployeeDocument(req, res, next) {
     });
 
     return success(res, 201, "Document added successfully", {
-      data: {
-        ...document.toJSON(),
-        displayName: documentDisplayName(document),
-      },
+      data: await withDocumentLinks(document),
     });
   } catch (err) {
     next(err);
@@ -458,18 +475,17 @@ async function updateEmployeeDocument(req, res, next) {
       updatedBy: req.employee?.id || null,
     };
 
+    const previousFile = req.file ? document.fileUrl : null;
     if (req.file) {
-      patch.fileUrl = `/uploads/employee-documents/${req.file.filename}`;
+      patch.fileUrl = req.file.key; // private S3 key
       patch.originalFileName = req.file.originalname;
     }
 
     await document.update(patch);
+    if (previousFile) await deleteStoredFile(previousFile);
 
     return success(res, 200, "Document updated successfully", {
-      data: {
-        ...document.toJSON(),
-        displayName: documentDisplayName(document),
-      },
+      data: await withDocumentLinks(document),
     });
   } catch (err) {
     next(err);
@@ -489,69 +505,43 @@ async function getEmployeeDocument(req, res, next) {
     if (!document) return error(res, 404, "Document not found");
 
     return success(res, 200, "Document fetched successfully", {
-      data: {
-        ...document.toJSON(),
-        displayName: documentDisplayName(document),
-      },
+      data: await withDocumentLinks(document),
     });
   } catch (err) {
     next(err);
   }
 }
 
+/**
+ * GET /api/employees/:id/documents/:documentId/download
+ * S3 file: redirects to a short-lived signed link that downloads it under its
+ * original file name. Legacy file (uploaded before S3): served from disk.
+ */
 const downloadEmployeeDocument = async (req, res, next) => {
   try {
     const { id, documentId } = req.params;
-
     const document = await EmployeeDocument.findOne({
-      where: {
-        id: documentId,
-        employeeId: id,
-      },
+      where: { id: documentId, employeeId: id },
     });
+    if (!document) return error(res, 404, "Employee document not found");
+    if (!document.fileUrl) return error(res, 404, "Document file path is missing");
 
-    if (!document) {
-      return error(res, 404, "Employee document not found");
+    const downloadName = document.originalFileName || path.basename(document.fileUrl);
+
+    const key = keyFromStored(document.fileUrl);
+    if (key) {
+      return res.redirect(await signedUrl(key, { expiresIn: DOCUMENT_LINK_SECONDS, downloadName }));
     }
 
-    const documentData = document.toJSON();
+    // Legacy: "/uploads/employee-documents/<file>" lives under src/uploads.
+    // Resolve from the file name only, so the path can't escape that folder.
+    const filePath = path.join(LEGACY_UPLOAD_ROOT, "employee-documents", path.basename(document.fileUrl));
+    if (!fs.existsSync(filePath)) return error(res, 404, "File not found on server");
 
-    console.log("Employee Document:", documentData);
-
-    // Get the stored file path/name.
-    // Change these according to the column used in your model.
-    const storedPath = documentData.fileUrl;
-
-    if (!storedPath) {
-      return error(res, 404, "Document file path is missing");
-    }
-
-    // If DB already contains the complete/relative path,
-    // resolve it from the project root.
-    const filePath = path.isAbsolute(storedPath)
-      ? storedPath
-      : path.join(process.cwd(), storedPath);
-
-    console.log("Stored path:", storedPath);
-    console.log("Resolved file path:", filePath);
-
-    if (!fs.existsSync(filePath)) {
-      return error(res, 404, "File not found on server");
-    }
-
-    const fileName = path.basename(filePath);
-
-    return res.download(filePath, fileName, (err) => {
-      if (err) {
-        console.error("File download error:", err);
-
-        if (!res.headersSent) {
-          next(err);
-        }
-      }
+    return res.download(filePath, downloadName, (err) => {
+      if (err && !res.headersSent) next(err);
     });
   } catch (err) {
-    console.error("Download employee document error:", err);
     next(err);
   }
 };
@@ -563,7 +553,9 @@ async function deleteEmployeeDocument(req, res, next) {
       where: { id: documentId, employeeId: id },
     });
     if (!document) return error(res, 404, "Document not found");
+    const storedFile = document.fileUrl;
     await document.destroy();
+    await deleteStoredFile(storedFile);
     return success(res, 200, "Document deleted successfully");
   } catch (err) {
     next(err);

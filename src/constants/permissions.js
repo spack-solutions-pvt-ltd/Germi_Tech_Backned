@@ -80,7 +80,7 @@ const PERMISSION_MODULES = [
     label: "Approvals",
     actions: [
       { action: "view", name: "View" },
-      { action: "edit", name: "Edit" },
+      { action: "approve", name: "Approve" },
     ],
   },
   {
@@ -88,13 +88,14 @@ const PERMISSION_MODULES = [
     label: "Verifications",
     actions: [
       { action: "view", name: "View" },
-      { action: "edit", name: "Edit" },
+      { action: "verify", name: "Verify" },
     ],
   },
   {
     module: "requests",
     label: "Requests",
     actions: [
+      { action: "global", name: "Global" },
       { action: "view", name: "View" },
       { action: "add", name: "Add" },
       { action: "edit", name: "Edit" },
@@ -105,7 +106,7 @@ const PERMISSION_MODULES = [
     label: "Payments",
     actions: [
       { action: "view", name: "View" },
-      { action: "edit", name: "Edit" },
+      { action: "process", name: "Process" },
     ],
   },
   {

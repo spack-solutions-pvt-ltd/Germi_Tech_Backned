@@ -13,14 +13,13 @@ const {
 
 const router = Router();
 
-router.get("/my-requests", getMyBagsRequests); // Requests → Bags
+router.get("/my-requests", getMyBagsRequests);
 router.get("/my-summary", getMyBagsSummary);
-router.get("/summary", getBagsSummary); // Verifications → Bags cards
-router.get("/", getAllBagsRequests); // Verifications → Bags list
+router.get("/summary", getBagsSummary); 
+router.get("/", getAllBagsRequests); 
 router.get("/:id", getBagsRequestById);
-router.post("/", createBagsRequest); // Add Request
-router.put("/:id", updateBagsRequest); // Pending only
+router.post("/", createBagsRequest); 
+router.put("/:id", updateBagsRequest);
 router.put("/:id/status", updateBagsRequestStatus);
-
 
 module.exports = router;

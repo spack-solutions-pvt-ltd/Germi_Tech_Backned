@@ -13,11 +13,11 @@ module.exports = (sequelize, DataTypes) => {
   BagsRequestStatusLog.init(
     {
       bagsRequestId: DataTypes.INTEGER,
-      fromStatus: DataTypes.STRING(20), // null for the creation row
-      toStatus: { type: DataTypes.STRING(20), allowNull: false },
+      fromStatus: DataTypes.STRING, // null for the creation row
+      toStatus: { type: DataTypes.STRING, allowNull: false },
       changedBy: DataTypes.INTEGER,
       bagsCount: DataTypes.INTEGER, // bags involved in this step (dispatch qty, return/share qty), if any
-      note: DataTypes.TEXT,
+      note: DataTypes.STRING,
     },
     {
       sequelize,

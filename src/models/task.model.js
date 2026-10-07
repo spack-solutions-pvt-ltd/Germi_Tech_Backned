@@ -36,7 +36,7 @@ module.exports = (sequelize, DataTypes) => {
       assignedBy: DataTypes.INTEGER,
       assignedTo: DataTypes.INTEGER,
       taskTypeId: DataTypes.INTEGER,
-      description: { type: DataTypes.TEXT, allowNull: false },
+      description: { type: DataTypes.STRING, allowNull: false },
       assignedDate: DataTypes.DATE,
       dueDate: { type: DataTypes.DATE, allowNull: false },
       status: {

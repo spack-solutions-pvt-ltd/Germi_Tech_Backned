@@ -13,7 +13,7 @@ module.exports = (sequelize, DataTypes) => {
     {
       notificationId: DataTypes.INTEGER,
       respondedBy: DataTypes.INTEGER,
-      message: { type: DataTypes.TEXT, allowNull: false },
+      message: { type: DataTypes.STRING, allowNull: false },
     },
     {
       sequelize,

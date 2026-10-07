@@ -1,6 +1,7 @@
 "use strict";
 const { Router } = require("express");
 const {
+  getSubOrganizerSummary,
   getAllSubOrganizers,
   getSubOrganizerById,
   createSubOrganizer,
@@ -11,6 +12,7 @@ const {
 
 const router = Router();
 
+router.get("/summary", getSubOrganizerSummary); // KPI cards — before /:id
 router.get("/", getAllSubOrganizers);
 router.get("/:id", getSubOrganizerById);
 router.post("/", createSubOrganizer);

@@ -29,6 +29,6 @@ router.post("/", createVehicleRequest);
 router.put("/:id", updateVehicleRequest);
 router.put("/:id/mark-in-process", markVehicleRequestInProcess);
 router.put("/:id/assign", assignVehicleRequest);
-router.put("/:id/cancel", cancelVehicleRequest);
+router.put("/:id/cancel", cancelVehicleRequest);                         
 
 module.exports = router;

@@ -53,7 +53,6 @@ router.use(indexRoutes.loadingRequests, authenticate, loadingRequestRoutes);
 router.use(indexRoutes.bagRequests, authenticate, bagRequestRoutes);
 router.use(indexRoutes.bagTransfers, authenticate, bagTransferRoutes);
 router.use(indexRoutes.payments, authenticate, paymentRoutes);
-
 // Independent routes
 router.get(indexRoutes.states, authenticate, getAllStates);
 router.get(indexRoutes.allFields, authenticate, getAllNames);

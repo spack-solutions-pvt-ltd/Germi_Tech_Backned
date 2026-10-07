@@ -23,7 +23,7 @@ const {
 } = require("../utils/bagsBalance");
 const {
   EMP_ATTRS,
-  AV_DETAIL_INCLUDE,
+  avDetailInclude,
   allotmentVillageInclude,
   toAllotmentOption,
   isProcessor,
@@ -37,11 +37,14 @@ const {
 
 const GERMITECH_COMPANY_NAME = "Germi Tech Company";
 
-// Balances move only on "received". not_received keeps the bags committed
-// (they may still turn up); cancelled releases them without any movement.
+// Balances move only on "received": the sender's allotment goes down and the
+// receiver's goes up. Leaving "received" (to not_received / cancelled)
+// resets that movement. not_received keeps the bags committed (they may
+// still turn up); cancelled releases them.
 const STATUS_FLOW = {
   pending: ["received", "not_received", "cancelled"],
   not_received: ["received", "cancelled"],
+  received: ["not_received", "cancelled"],
 };
 
 // Statuses whose bags are still committed from the sender's allotment.
@@ -69,7 +72,11 @@ const STATUS_LOG_INCLUDE = {
 /** Adds direction (for the viewer) and a display name for the destination. */
 function decorate(transfer, viewerId) {
   const json = transfer.toJSON();
-  json.direction = json.senderId === viewerId ? "outgoing" : json.toSupervisorId === viewerId ? "incoming" : null;
+  // createdByMe: I sent it, or raised it on a supervisor's behalf.
+  // receivedByMe: a shared transfer whose receiving supervisor is me.
+  json.createdByMe = json.senderId === viewerId || json.createdBy === viewerId;
+  json.receivedByMe = json.type === "shared" && json.toSupervisorId === viewerId;
+  json.direction = json.createdByMe ? "outgoing" : json.receivedByMe ? "incoming" : null;
   json.destinationName =
     json.type === "shared"
       ? json.toSupervisor?.name || null
@@ -143,18 +150,23 @@ async function listBagsTransfers(baseWhere, req, res, next) {
 }
 
 /**
- * GET /bag-transfers/my-transfers?direction=outgoing|incoming
- * Bags I sent + bags other supervisors shared with me.
+ * GET /bag-transfers/my-transfers?direction=outgoing|incoming&type=&status=&search=
+ * Every transfer I created (to a company or a supervisor) + every supervisor
+ * transfer where I'm the receiving supervisor. Each row carries
+ * createdByMe / receivedByMe; direction=outgoing|incoming narrows to one side.
  */
 async function getMyBagsTransfers(req, res, next) {
   const me = req.employee.id;
-  const { direction } = req.query;
-  const where =
-    direction === "outgoing"
-      ? { senderId: me }
-      : direction === "incoming"
-        ? { toSupervisorId: me }
-        : { [Op.or]: [{ senderId: me }, { toSupervisorId: me }] };
+  // Transfers I created (sent myself or raised for someone) — company or supervisor.
+  const created = { [Op.or]: [{ senderId: me }, { createdBy: me }] };
+  // Supervisor transfers where I'm the receiving supervisor.
+  const received = { type: "shared", toSupervisorId: me };
+
+  const where = {
+    outgoing: created,
+    incoming: received,
+  }[req.query.direction] || { [Op.or]: [created, received] };
+
   return listBagsTransfers(where, req, res, next);
 }
 
@@ -247,7 +259,7 @@ async function getMyAllotmentsWithBags(req, res, next) {
   try {
     const me = Number(req.query.supervisorId) || req.employee.id;
     const [rows, balances, committed] = await Promise.all([
-      AllotmentVillage.findAll({ where: { supervisorId: me }, include: AV_DETAIL_INCLUDE, order: [["createdAt", "DESC"]] }),
+      AllotmentVillage.findAll({ where: { supervisorId: me }, include: avDetailInclude(), order: [["createdAt", "DESC"]] }),
       BagsBalance.findAll({ where: { supervisorId: me } }),
       BagsTransfer.findAll({
         where: { senderId: me, status: OPEN_STATUSES },
@@ -328,7 +340,7 @@ async function getSupervisorAllotments(req, res, next) {
   try {
     const rows = await AllotmentVillage.findAll({
       where: { supervisorId: req.params.supervisorId },
-      include: AV_DETAIL_INCLUDE,
+      include: avDetailInclude(),
       order: [["createdAt", "DESC"]],
     });
     return success(res, 200, "Allotments fetched successfully", { data: rows.map(toAllotmentOption) });
@@ -516,17 +528,45 @@ function authorizeTransition(transfer, toStatus, employee) {
 }
 
 /**
+ * Balance changes for a received transfer: sender's allotment -bags, and for
+ * 'shared' the receiver's allotment +bags. direction -1 reverses them.
+ * Sorted so balance rows are always locked in the same order (no deadlocks).
+ */
+function transferMovements(transfer, direction = 1) {
+  const qty = transfer.bags * direction;
+  const movements = [
+    {
+      supervisorId: transfer.senderId,
+      allotmentVillageId: transfer.fromAllotmentVillageId,
+      deltas: transfer.type === "return" ? { returnedBags: qty } : { sharedOutBags: qty },
+    },
+  ];
+  if (transfer.type === "shared") {
+    movements.push({
+      supervisorId: transfer.toSupervisorId,
+      allotmentVillageId: transfer.toAllotmentVillageId,
+      deltas: { sharedInBags: qty },
+    });
+  }
+  return movements.sort((a, b) => a.supervisorId - b.supervisorId || a.allotmentVillageId - b.allotmentVillageId);
+}
+
+/**
  * PUT /bag-transfers/:id/status
- * body: { status: "received" | "not_received" | "cancelled", note?, reason? }
+ * body: { status: "received" | "not_received" | "cancelled", note? }
+ *   note — optional; saved in the status history (and as the cancellation reason)
  *
- * received      — deducts `bags` from the sender's allotment and, for 'shared',
- *                 adds them to the receiver's selected allotment
- * not_received  — no balance change; can later be marked received or cancelled
- * cancelled     — no balance change
+ * received                    — sender's allotment -bags; receiver's allotment +bags ('shared')
+ * received → not_received /
+ *            cancelled         — resets that: sender gets the bags back, receiver loses them
+ *                                (409 if the receiver no longer has them)
+ * pending  → not_received /
+ *            cancelled         — nothing had moved, nothing to reset
  */
 async function updateBagsTransferStatus(req, res, next) {
   try {
-    const { status: toStatus, note, reason } = req.body;
+    const { status: toStatus } = req.body;
+    const note = req.body.note || req.body.reason || null; // "reason" still accepted from older clients
     if (!toStatus) return error(res, 400, "status is required");
 
     await sequelize.transaction(async (t) => {
@@ -544,37 +584,25 @@ async function updateBagsTransferStatus(req, res, next) {
       const updates = { status: toStatus };
 
       if (toStatus === "received") {
-        const movements = [
-          {
-            supervisorId: transfer.senderId,
-            allotmentVillageId: transfer.fromAllotmentVillageId,
-            deltas: transfer.type === "return" ? { returnedBags: transfer.bags } : { sharedOutBags: transfer.bags },
-          },
-        ];
-        if (transfer.type === "shared") {
-          movements.push({
-            supervisorId: transfer.toSupervisorId,
-            allotmentVillageId: transfer.toAllotmentVillageId,
-            deltas: { sharedInBags: transfer.bags },
-          });
-        }
-        // Lock balance rows in a fixed order so opposite-direction transfers can't deadlock.
-        movements.sort((a, b) => a.supervisorId - b.supervisorId || a.allotmentVillageId - b.allotmentVillageId);
-        for (const m of movements) await applyBagMovement(m, t);
-
+        for (const m of transferMovements(transfer)) await applyBagMovement(m, t);
         Object.assign(updates, { receivedBy: req.employee.id, receivedAt: now });
+      } else if (fromStatus === "received") {
+        // Undo the receipt. applyBagMovement throws 409 if the receiver has
+        // already used / passed on those bags and can't give them back.
+        for (const m of transferMovements(transfer, -1)) await applyBagMovement(m, t);
+        Object.assign(updates, { receivedBy: null, receivedAt: null });
       }
 
       if (toStatus === "cancelled") {
         Object.assign(updates, {
           cancelledBy: req.employee.id,
           cancelledAt: now,
-          cancellationReason: reason || note || null,
+          cancellationReason: note,
         });
       }
 
       await transfer.update(updates, { transaction: t });
-      await logStatus(transfer.id, fromStatus, toStatus, req.employee.id, transfer.bags, note || reason, t);
+      await logStatus(transfer.id, fromStatus, toStatus, req.employee.id, transfer.bags, note, t);
     });
 
     return success(res, 200, "Bags transfer status updated successfully", {

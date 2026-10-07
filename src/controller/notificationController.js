@@ -14,9 +14,9 @@ const {
 } = require("../utils/pagination");
 const { success, error } = require("../utils/response");
 const { generateId } = require("../utils/generateIds");
-const { NOTIFICATION_UPLOAD_DIR } = require("../middleWare/upload.middleware");
-
-const UPLOAD_URL = "/uploads/notifications";
+const { respondedBySql, getMyNotificationCounts } = require("../utils/notificationCounts");
+const { LEGACY_UPLOAD_ROOT } = require("../middleWare/upload.middleware");
+const { keyFromStored, signedUrl, isCloudFrontConfigured } = require("../utils/s3");
 const SENDER_INCLUDE = {
   model: Employee,
   as: "sender",
@@ -24,16 +24,17 @@ const SENDER_INCLUDE = {
 };
 
 /**
- * Attachment columns from the uploaded files (image + document). Only
- * includes what was actually uploaded, so an update keeps existing files.
+ * Attachment columns from the uploaded files (image + document) — CloudFront
+ * URLs (S3: notifications/). Only includes what was actually uploaded, so an
+ * update keeps existing files.
  */
 function attachmentFields(files = {}) {
   const image = files.image?.[0];
   const document = files.document?.[0];
   return {
-    ...(image && { imageUrl: `${UPLOAD_URL}/${image.filename}` }),
+    ...(image && { imageUrl: image.url }),
     ...(document && {
-      documentUrl: `${UPLOAD_URL}/${document.filename}`,
+      documentUrl: document.url,
       documentName: document.originalname,
     }),
   };
@@ -59,28 +60,28 @@ function searchWhere(search) {
  *   one "to All" notification bumps every level's count by one).
  */
 const getNotificationSummary = async () => {
-  const [unreadRows] = await sequelize.query(
-    `SELECT COUNT(*) as count
-     FROM \Notifications\ n
-     WHERE NOT EXISTS (
-       SELECT 1
-       FROM \NotificationResponses\ r
-       WHERE r.notificationId = n.id
-     )`,
-  );
-
-  const [l1Count, l2Count, l3Count] = await Promise.all([
+  const [unreadCount, l1Count, l2Count, l3Count] = await Promise.all([
+    Notification.count({
+      where: sequelize.literal(
+        "NOT EXISTS (SELECT 1 FROM `NotificationResponses` AS nr WHERE nr.notificationId = `Notification`.`id`)",
+      ),
+    }),
     Notification.count({ where: { toLevel: { [Op.in]: ["L1", "All"] } } }),
     Notification.count({ where: { toLevel: { [Op.in]: ["L2", "All"] } } }),
     Notification.count({ where: { toLevel: { [Op.in]: ["L3", "All"] } } }),
   ]);
 
-  return {
-    unreadCount: Number(unreadRows[0].count),
-    l1Count,
-    l2Count,
-    l3Count,
-  };
+  return { unreadCount, l1Count, l2Count, l3Count };
+};
+
+/** GET /api/notifications/summary — Notifications page KPI cards on their own. */
+const getNotificationsSummary = async (req, res, next) => {
+  try {
+    const data = await getNotificationSummary();
+    return success(res, 200, "Notification summary fetched successfully", { data });
+  } catch (err) {
+    next(err);
+  }
 };
 
 /** GET /api/notifications?search=kharif&toLevel=L3&page=1&limit=20 */
@@ -194,31 +195,27 @@ const getMyNotifications = async (req, res, next) => {
       toLevel: { [Op.in]: [req.employee.level, "All"] },
     };
 
-    const result = await Notification.findAndCountAll({
-      where,
-      include: [SENDER_INCLUDE],
-      attributes: {
-        include: [
-          [
-            sequelize.literal(`EXISTS (
-              SELECT 1 FROM \`NotificationResponses\` AS nr
-              WHERE nr.notificationId = \`Notification\`.id
-                AND nr.respondedBy = ${sequelize.escape(req.employee.id)}
-            )`),
-            "respondedByMe",
-          ],
-        ],
-      },
-      order: [["createdAt", "DESC"]],
-      limit,
-      offset,
-    });
+    const [result, summary] = await Promise.all([
+      Notification.findAndCountAll({
+        where,
+        include: [SENDER_INCLUDE],
+        attributes: {
+          include: [[sequelize.literal(respondedBySql(req.employee.id)), "respondedByMe"]],
+        },
+        order: [["createdAt", "DESC"]],
+        limit,
+        offset,
+      }),
+      // Badge counts for this user (ignore search): all of theirs / not yet responded to.
+      getMyNotificationCounts(req.employee),
+    ]);
 
     const response = buildPaginatedResponse(result, page, limit);
     response.data = result.rows.map((row) => {
       const json = row.toJSON();
       return { ...json, respondedByMe: Boolean(Number(json.respondedByMe)) };
     });
+    response.summary = summary;
     return success(res, 200, "Notifications fetched successfully", response);
   } catch (err) {
     next(err);
@@ -235,13 +232,26 @@ const downloadNotificationDocument = async (req, res, next) => {
       attributes: ["id", "documentUrl", "documentName"],
     });
     if (!notification) return error(res, 404, "Notification not found");
-    if (!notification.documentUrl) return error(res, 404, "This notification has no document");
+    const stored = notification.getDataValue("documentUrl"); // raw value: S3 key, URL or /uploads path
+    if (!stored) return error(res, 404, "This notification has no document");
+    const downloadName = notification.documentName || path.basename(stored);
 
-    // Resolve from the stored file name only, so the path can't escape the uploads folder.
-    const filePath = path.join(NOTIFICATION_UPLOAD_DIR, path.basename(notification.documentUrl));
+    // S3: CloudFront URL when configured (the object carries Content-Disposition:
+    // attachment + original name); until then a short-lived signed S3 link.
+    const key = keyFromStored(stored);
+    if (key) {
+      return res.redirect(
+        isCloudFrontConfigured() ? notification.documentUrl : await signedUrl(key, { downloadName }),
+      );
+    }
+    if (/^https?:\/\//.test(stored)) return res.redirect(stored);
+
+    // Local file (uploaded before S3, or with the local fallback). Resolve from
+    // the stored file name only, so the path can't escape the uploads folder.
+    const filePath = path.join(LEGACY_UPLOAD_ROOT, "notifications", path.basename(stored));
     if (!fs.existsSync(filePath)) return error(res, 404, "Document file is missing on the server");
 
-    return res.download(filePath, notification.documentName || path.basename(filePath));
+    return res.download(filePath, downloadName);
   } catch (err) {
     next(err);
   }
@@ -420,6 +430,7 @@ const createNotificationResponse = async (req, res, next) => {
 };
 
 module.exports = {
+  getNotificationsSummary,
   getAllNotifications,
   getMyNotifications,
   downloadNotificationDocument,

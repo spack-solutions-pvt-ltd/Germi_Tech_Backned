@@ -29,14 +29,14 @@ module.exports = (sequelize, DataTypes) => {
   SeedCompany.init(
     {
       companyId: DataTypes.STRING,
-      name: DataTypes.STRING(150),
-      number: DataTypes.INTEGER,
-      email: DataTypes.STRING(150),
-      pocName: DataTypes.STRING(150),
-      pocNumber: DataTypes.INTEGER,
-      fullAddress: DataTypes.STRING(500),
-      district: DataTypes.STRING(100),
-      pincode: DataTypes.STRING(10),
+      name: DataTypes.STRING,
+      number: DataTypes.STRING,
+      email: DataTypes.STRING,
+      pocName: DataTypes.STRING,
+      pocNumber: DataTypes.STRING,
+      fullAddress: DataTypes.STRING,
+      district: DataTypes.STRING,
+      pincode: DataTypes.STRING,
       stateId: DataTypes.INTEGER,
       status: {
         type: DataTypes.ENUM("Active", "Inactive"),

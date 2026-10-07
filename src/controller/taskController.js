@@ -17,6 +17,7 @@ const {
   getEffectivePermissionCodes,
 } = require("../middleWare/auth.middleware");
 const { success, error } = require("../utils/response");
+const { resolveSeason } = require("../utils/periods");
 
 const TASK_INCLUDES = [
   {
@@ -45,29 +46,60 @@ async function markOverdueTasks() {
   );
 }
 
+// Tasks still being worked on: pending, sent for approval, or sent back.
+const OPEN_TASK_STATUSES = ["Pending", "Approval", "Reassigned"];
+
 /**
- * The Global Task List's 4 cards: Open tasks / Pending approval / Completed
- * / Total tasks. "Open" and "Pending approval" are mutually exclusive
- * (Pending only vs Approval only) — they don't overlap with each other, and
- * neither counts Overdue/Cancelled tasks individually, but "Total tasks"
- * counts everything regardless of status, so the four numbers won't always
- * sum evenly if there are Overdue/Cancelled tasks in the mix.
+ * The Global Task List's cards:
+ *   openTasks          — Pending / Approval / Reassigned ("pending or awaiting approval")
+ *   dueToday           — open tasks whose due date is today ("closing by end of day")
+ *   completedThisSeason — Completed, last updated inside the current season
+ *   overdue            — status Overdue (kept current by markOverdueTasks)
+ * plus pendingApproval, completed (all time) and totalTasks.
  *
  * baseWhere lets the cards be scoped the same way as the list itself —
  * e.g. { assignedBy: employeeId } for someone without global_view, so the
  * numbers on the cards always match what's actually in the table below them.
  */
 async function getTaskSummary(baseWhere = {}) {
-  const [openTasks, pendingApproval, completed, totalTasks] = await Promise.all(
-    [
-      Task.count({ where: { ...baseWhere, status: "Pending" } }),
+  const now = new Date();
+  const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const startOfTomorrow = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1);
+  const season = resolveSeason();
+
+  const [openTasks, dueToday, completedThisSeason, overdue, pendingApproval, completed, totalTasks] =
+    await Promise.all([
+      Task.count({ where: { ...baseWhere, status: OPEN_TASK_STATUSES } }),
+      Task.count({
+        where: {
+          ...baseWhere,
+          status: OPEN_TASK_STATUSES,
+          dueDate: { [Op.gte]: startOfToday, [Op.lt]: startOfTomorrow },
+        },
+      }),
+      Task.count({
+        where: {
+          ...baseWhere,
+          status: "Completed",
+          updatedAt: { [Op.gte]: season.start, [Op.lt]: season.end },
+        },
+      }),
+      Task.count({ where: { ...baseWhere, status: "Overdue" } }),
       Task.count({ where: { ...baseWhere, status: "Approval" } }),
       Task.count({ where: { ...baseWhere, status: "Completed" } }),
       Task.count({ where: baseWhere }),
-    ],
-  );
+    ]);
 
-  return { openTasks, pendingApproval, completed, totalTasks };
+  return {
+    openTasks,
+    dueToday,
+    completedThisSeason,
+    overdue,
+    pendingApproval,
+    completed,
+    totalTasks,
+    season: season.label,
+  };
 }
 
 /**
@@ -161,6 +193,17 @@ async function getMyTaskSummary(employeeId) {
   return { pendingTasks, overdue, reassigned, completed };
 }
 
+/** GET /api/tasks/my-summary — My Tasks page KPI cards on their own. */
+async function getMyTasksSummary(req, res, next) {
+  try {
+    await markOverdueTasks();
+    const data = await getMyTaskSummary(req.employee.id);
+    return success(res, 200, "My task summary fetched successfully", { data });
+  } catch (err) {
+    next(err);
+  }
+}
+
 /**
  * GET /api/tasks/my-tasks?search=&status=&taskTypeId=&page=&limit=
  */
@@ -174,7 +217,7 @@ async function getMyTasks(req, res, next) {
     const where = { assignedTo: req.employee.id };
     if (search) {
       where[Op.or] = [
-        { taskCode: { [Op.like]: `%${search}%` } },
+        { taskId: { [Op.like]: `%${search}%` } },
         { description: { [Op.like]: `%${search}%` } },
       ];
     }
@@ -202,28 +245,48 @@ async function getMyTasks(req, res, next) {
 }
 
 /** GET /api/tasks?search=&status=&assignedBy=&assignedTo=&taskTypeId=&page=&limit= */
+/**
+ * Whether the employee has task_management.global_view (sees every task) —
+ * otherwise they only see tasks they assigned. Fetched fresh, same rule as
+ * updateTask. Returns null if the employee no longer exists.
+ */
+async function hasGlobalTaskView(employeeId) {
+  const employeeWithPermissions = await Employee.findByPk(employeeId, {
+    include: {
+      model: Role,
+      as: "role",
+      include: { model: Permission, as: "permissions" },
+    },
+  });
+  if (!employeeWithPermissions) return null;
+
+  const rolePermissions = employeeWithPermissions.role
+    ? employeeWithPermissions.role.permissions
+    : [];
+  const effectiveCodes = await getEffectivePermissionCodes(employeeId, rolePermissions);
+  return effectiveCodes.has("task_management.global_view");
+}
+
+/** GET /api/tasks/summary — Task management KPI cards, scoped like the list. */
+async function getTasksSummary(req, res, next) {
+  try {
+    await markOverdueTasks();
+    const hasGlobalView = await hasGlobalTaskView(req.employee.id);
+    if (hasGlobalView === null) return error(res, 404, "Employee not found");
+
+    const data = await getTaskSummary(hasGlobalView ? {} : { assignedBy: req.employee.id });
+    return success(res, 200, "Task summary fetched successfully", { data });
+  } catch (err) {
+    next(err);
+  }
+}
+
 async function getAllTasks(req, res, next) {
   try {
     await markOverdueTasks();
 
-    // Same permission rule as updateTask, fetched fresh for the same
-    const employeeWithPermissions = await Employee.findByPk(req.employee.id, {
-      include: {
-        model: Role,
-        as: "role",
-        include: { model: Permission, as: "permissions" },
-      },
-    });
-    if (!employeeWithPermissions) return error(res, 404, "Employee not found");
-
-    const rolePermissions = employeeWithPermissions.role
-      ? employeeWithPermissions.role.permissions
-      : [];
-    const effectiveCodes = await getEffectivePermissionCodes(
-      req.employee.id,
-      rolePermissions,
-    );
-    const hasGlobalView = effectiveCodes.has("task_management.global_view");
+    const hasGlobalView = await hasGlobalTaskView(req.employee.id);
+    if (hasGlobalView === null) return error(res, 404, "Employee not found");
 
     const { search, status, assignedBy, assignedTo, taskTypeId } = req.query;
     const { page, limit, offset } = getPagination(req.query);
@@ -231,7 +294,7 @@ async function getAllTasks(req, res, next) {
     const where = {};
     if (search) {
       where[Op.or] = [
-        { taskCode: { [Op.like]: `%${search}%` } },
+        { taskId: { [Op.like]: `%${search}%` } },
         { description: { [Op.like]: `%${search}%` } },
       ];
     }
@@ -566,6 +629,8 @@ async function updateTaskStatus(req, res, next) {
 }
 
 module.exports = {
+  getTasksSummary,
+  getMyTasksSummary,
   getAllTasks,
   getMyTasks,
   getTaskById,

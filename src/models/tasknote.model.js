@@ -22,7 +22,7 @@ module.exports = (sequelize, DataTypes) => {
         type: DataTypes.ENUM("submission", "reassign", "cancel"),
         allowNull: false,
       },
-      message: { type: DataTypes.TEXT, allowNull: false },
+      message: { type: DataTypes.STRING, allowNull: false },
     },
     {
       sequelize,

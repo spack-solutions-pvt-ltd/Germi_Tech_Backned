@@ -1,83 +1,58 @@
 "use strict";
-const multer = require("multer");
 const path = require("path");
-const fs = require("fs");
+const { createS3Upload, IMAGE_OR_PDF } = require("./s3Upload.middleware");
+const { S3_FOLDERS } = require("../utils/s3");
 
-const UPLOAD_DIR = path.join(__dirname, "..", "uploads", "employee-documents");
-fs.mkdirSync(UPLOAD_DIR, { recursive: true });
-
-const ALLOWED_MIME_TYPES = ["image/jpeg", "image/png", "image/webp", "application/pdf"];
-
-const storage = multer.diskStorage({
-  destination: (req, file, cb) => cb(null, UPLOAD_DIR),
-  filename: (req, file, cb) => {
-    const ext = path.extname(file.originalname);
-    const unique = `${req.params.id}-${file.fieldname}-${Date.now()}${ext}`;
-    cb(null, unique);
-  },
+// Employee documents (Aadhaar, licence, RC, ...) are ID proofs, so they are
+// PRIVATE: stored in S3 with no public URL. Save file.key; the API hands out
+// short-lived signed links to view / download them.
+const employeeDocumentFileUpload = createS3Upload({
+  folder: S3_FOLDERS.employeeDocuments,
+  single: "document",
+  maxSizeMb: 10,
+  isPrivate: true,
 });
 
-const upload = multer({
-  storage,
-  limits: { fileSize: 5 * 1024 * 1024 }, // 5MB per file
-  fileFilter: (req, file, cb) => {
-    if (!ALLOWED_MIME_TYPES.includes(file.mimetype)) {
-      return cb(new Error("Only JPEG, PNG, WEBP or PDF files are allowed"));
-    }
-    cb(null, true);
-  },
+// Multi-field variant (one file per EmployeeDocument.type), same rules.
+const employeeDocumentUpload = createS3Upload({
+  folder: S3_FOLDERS.employeeDocuments,
+  fields: [
+    { name: "aadhar", maxCount: 1 },
+    { name: "drivers_license", maxCount: 1 },
+    { name: "rc", maxCount: 1 },
+    { name: "other", maxCount: 1 },
+  ],
+  maxSizeMb: 10,
+  isPrivate: true,
 });
-
-// Field names match the EmployeeDocument.type enum exactly, one file each.
-const employeeDocumentUpload = upload.fields([
-  { name: "aadhar", maxCount: 1 },
-  { name: "drivers_license", maxCount: 1 },
-  { name: "rc", maxCount: 1 },
-  { name: "other", maxCount: 1 },
-]);
 
 // Broadcast notification attachments: an optional image + an optional
-// downloadable document (pdf, word, excel, csv, powerpoint, text).
-const NOTIFICATION_UPLOAD_DIR = path.join(__dirname, "..", "uploads", "notifications");
-fs.mkdirSync(NOTIFICATION_UPLOAD_DIR, { recursive: true });
-
-// Checked by extension — browsers report office/csv MIME types inconsistently.
-const NOTIFICATION_FILE_TYPES = {
-  image: { extensions: [".jpg", ".jpeg", ".png", ".webp"], label: "JPEG, PNG or WEBP" },
-  document: {
-    extensions: [".pdf", ".doc", ".docx", ".xls", ".xlsx", ".csv", ".ppt", ".pptx", ".txt"],
-    label: "PDF, Word, Excel, CSV, PowerPoint or text",
+// downloadable document. Public via CloudFront; the document is served as a
+// download under its original file name.
+const notificationUpload = createS3Upload({
+  folder: S3_FOLDERS.notifications,
+  fields: [
+    { name: "image", maxCount: 1 },
+    { name: "document", maxCount: 1 },
+  ],
+  allowed: {
+    image: { extensions: [".jpg", ".jpeg", ".png", ".webp"], label: "JPEG, PNG or WEBP" },
+    document: {
+      extensions: [".pdf", ".doc", ".docx", ".xls", ".xlsx", ".csv", ".ppt", ".pptx", ".txt"],
+      label: "PDF, Word, Excel, CSV, PowerPoint or text",
+    },
   },
-};
-
-const notificationStorage = multer.diskStorage({
-  destination: (req, file, cb) => cb(null, NOTIFICATION_UPLOAD_DIR),
-  filename: (req, file, cb) => {
-    const ext = path.extname(file.originalname).toLowerCase();
-    const unique = `${Date.now()}-${Math.round(Math.random() * 1e9)}`;
-    cb(null, `notification-${file.fieldname}-${unique}${ext}`);
-  },
+  maxSizeMb: 10,
+  downloadFields: ["document"],
 });
 
-const notificationUpload = multer({
-  storage: notificationStorage,
-  limits: { fileSize: 10 * 1024 * 1024 }, // 10MB per file
-  fileFilter: (req, file, cb) => {
-    const allowed = NOTIFICATION_FILE_TYPES[file.fieldname];
-    const ext = path.extname(file.originalname).toLowerCase();
-    if (!allowed || !allowed.extensions.includes(ext)) {
-      return cb(new Error(`${file.fieldname}: only ${allowed?.label || "known"} files are allowed`));
-    }
-    cb(null, true);
-  },
-}).fields([
-  { name: "image", maxCount: 1 },
-  { name: "document", maxCount: 1 },
-]);
+// Where files uploaded before S3 live on disk (still served for old rows).
+const LEGACY_UPLOAD_ROOT = path.join(__dirname, "..", "uploads");
 
 module.exports = {
+  employeeDocumentFileUpload,
   employeeDocumentUpload,
   notificationUpload,
-  UPLOAD_DIR,
-  NOTIFICATION_UPLOAD_DIR,
+  IMAGE_OR_PDF,
+  LEGACY_UPLOAD_ROOT,
 };

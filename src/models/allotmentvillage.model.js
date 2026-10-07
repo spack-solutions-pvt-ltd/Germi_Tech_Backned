@@ -23,6 +23,12 @@ module.exports = (sequelize, DataTypes) => {
       allottedAcres: DataTypes.DECIMAL(10, 2),
       standingAcres: DataTypes.DECIMAL(10, 2),
       gpsPendingAcres: DataTypes.DECIMAL(10, 2),
+      // Same values as Allotment.status — every village allotment starts open.
+      status: {
+        type: DataTypes.ENUM("open", "closed"),
+        allowNull: false,
+        defaultValue: "open",
+      },
     },
     {
       sequelize,

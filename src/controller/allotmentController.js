@@ -534,7 +534,12 @@ async function updateVillageAllotment(req, res, next) {
       gpsPendingAcres,
       supervisorId,
       subOrganizerId,
+      status,
     } = req.body;
+
+    if (status !== undefined && !["open", "closed"].includes(status)) {
+      return error(res, 400, "status must be open or closed");
+    }
 
     if (supervisorId !== undefined) {
       const supervisor = await Employee.findByPk(supervisorId);
@@ -573,6 +578,7 @@ async function updateVillageAllotment(req, res, next) {
       ...(gpsPendingAcres !== undefined && { gpsPendingAcres }),
       ...(supervisorId !== undefined && { supervisorId }),
       ...(subOrganizerId !== undefined && { subOrganizerId }),
+      ...(status !== undefined && { status }),
     });
 
     return success(res, 200, "Village allotment updated successfully", {
@@ -583,48 +589,93 @@ async function updateVillageAllotment(req, res, next) {
   }
 }
 
+/**
+ * A supervisor's village allotments as dropdown options: one line "AL-1001"
+ * plus a sub-caption "Village -> Crop -> Variety". Shared by "my allotments"
+ * and "allotments of supervisor X" so both return the same shape.
+ */
+async function findAllotmentOptions(supervisorId) {
+  const rows = await AllotmentVillage.findAll({
+    where: { supervisorId },
+    include: [
+      {
+        model: Village,
+        as: "village",
+        attributes: ["id", "name", "villageId"],
+      },
+      {
+        model: Allotment,
+        as: "allotment",
+        attributes: ["id", "allotmentId"],
+        include: {
+          model: CompanyCrop,
+          as: "companyCrop",
+          attributes: ["id", "varietyName"],
+          include: { model: Crop, as: "crop", attributes: ["id", "name"] },
+        },
+      },
+    ],
+    order: [["createdAt", "DESC"]],
+  });
+
+  return rows.map((row) => ({
+    allotmentVillageId: row.id,
+    allotmentId: row.allotment?.allotmentId,
+    village: row.village?.name,
+    crop: row.allotment?.companyCrop?.crop?.name,
+    variety: row.allotment?.companyCrop?.varietyName,
+    allottedAcres: row.allottedAcres,
+    status: row.status,
+    supervisorId: row.supervisorId,
+  }));
+}
+
+/** GET .../allotment-villages — the logged-in supervisor's own allotments. */
 const getMyAssignedAllotmentVillages = async (req, res, next) => {
   try {
-    const rows = await AllotmentVillage.findAll({
-      where: { supervisorId: req.employee.id },
-      include: [
-        {
-          model: Village,
-          as: "village",
-          attributes: ["id", "name", "villageId"],
-        },
-        {
-          model: Allotment,
-          as: "allotment",
-          attributes: ["id", "allotmentId"],
-          include: {
-            model: CompanyCrop,
-            as: "companyCrop",
-            attributes: ["id", "varietyName"],
-            include: { model: Crop, as: "crop", attributes: ["id", "name"] },
-          },
-        },
-      ],
-      order: [["createdAt", "DESC"]],
+    const options = await findAllotmentOptions(req.employee.id);
+    return success(res, 200, "Assigned allotment-villages fetched successfully", {
+      data: options,
     });
+  } catch (err) {
+    next(err);
+  }
+};
 
-    // Flatten into exactly the shape the dropdown needs: one line "AL-1001"
-    // plus a sub-caption "Village -> Crop -> Variety".
-    const options = rows.map((row) => ({
-      allotmentVillageId: row.id,
-      allotmentId: row.allotment.allotmentId,
-      village: row.village.name,
-      crop: row.allotment.companyCrop.crop.name,
-      variety: row.allotment.companyCrop.varietyName,
-      allottedAcres: row.allottedAcres,
-    }));
+/**
+ * GET .../supervisors/:supervisorId/allotment-villages — another supervisor's
+ * allotments (e.g. a loading row for a different supervisor). Same shape as
+ * getMyAssignedAllotmentVillages.
+ */
+const getAllotmentVillagesBySupervisor = async (req, res, next) => {
+  try {
+    const supervisor = await Employee.findByPk(req.params.supervisorId, {
+      attributes: ["id", "empId", "name", "level"],
+    });
+    if (!supervisor) return error(res, 404, "Supervisor not found");
 
-    return success(
-      res,
-      200,
-      "Assigned allotment-villages fetched successfully",
-      { data: options },
-    );
+    const options = await findAllotmentOptions(supervisor.id);
+    return success(res, 200, "Supervisor allotment-villages fetched successfully", {
+      supervisor,
+      data: options,
+    });
+  } catch (err) {
+    next(err);
+  }
+};
+
+/**
+ * GET .../supervisors — "Supervisor" dropdown: active L3 supervisors other
+ * than the caller (the UI shows the caller as "Self").
+ */
+const getSupervisorOptions = async (req, res, next) => {
+  try {
+    const data = await Employee.findAll({
+      where: { level: "L3", status: "Active", id: { [Op.ne]: req.employee.id } },
+      attributes: ["id", "empId", "name", "level"],
+      order: [["name", "ASC"]],
+    });
+    return success(res, 200, "Supervisors fetched successfully", { data });
   } catch (err) {
     next(err);
   }
@@ -656,7 +707,28 @@ const getAllNames = async (req, res, next) => {
   }
 };
 
+/**
+ * GET /allotments/summary?companyId=&cropId=&season=&year= — Allotments page
+ * KPI cards on their own (the list response also carries them as `summary`).
+ * { acresAllotted, standingAcres, balanceAcres, gpsPendingAcres }
+ */
+const getAllotmentsSummary = async (req, res, next) => {
+  try {
+    const { companyId, cropId, season, year } = req.query;
+    const where = {};
+    if (companyId) where.companyId = companyId;
+    if (season) where.season = season;
+    if (year) where.year = year;
+
+    const data = await getAllotmentSummary(where, cropId);
+    return success(res, 200, "Allotment summary fetched successfully", { data });
+  } catch (err) {
+    next(err);
+  }
+};
+
 module.exports = {
+  getAllotmentsSummary,
   getAllAllotments,
   getAllotmentVillageTable,
   getAllotmentById,
@@ -666,5 +738,7 @@ module.exports = {
   addVillageAllotment,
   updateVillageAllotment,
   getMyAssignedAllotmentVillages,
+  getAllotmentVillagesBySupervisor,
+  getSupervisorOptions,
   getAllNames,
 };

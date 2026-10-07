@@ -20,9 +20,9 @@ module.exports = (sequelize, DataTypes) => {
   LaborGroup.init(
     {
       laborGroupId: DataTypes.STRING(30),
-      name: DataTypes.STRING(150),
-      contactNumber: DataTypes.STRING(15),
-      upiNumber: DataTypes.STRING(50),
+      name: DataTypes.STRING,
+      contactNumber: DataTypes.STRING,
+      upiNumber: DataTypes.STRING,
       createdBy: DataTypes.INTEGER,
     },
     {

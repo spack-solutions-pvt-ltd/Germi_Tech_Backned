@@ -1,6 +1,7 @@
 "use strict";
 const { Op } = require("sequelize");
-const { SubOrganizer, Village, Employee } = require("../models");
+const { SubOrganizer, Village, Employee, AllotmentVillage, Allotment } = require("../models");
+const { resolveSeason } = require("../utils/periods");
 const {
   getPagination,
   buildPaginatedResponse,
@@ -196,7 +197,52 @@ const updateSubOrganizerStatusById = async (req, res, next) => {
   }
 };
 
+/**
+ * GET /sub-organizer/summary?season=&year= — Sub organisers page KPI cards.
+ * acresHandled    = allotted acres of village allotments managed by a sub
+ *                   organiser, in the season (current unless ?season=&year=)
+ * addedThisSeason = sub organisers created since the season started
+ * registeredAcres = sum of the acres recorded on each sub organiser
+ */
+const getSubOrganizerSummary = async (req, res, next) => {
+  try {
+    const season = resolveSeason(req.query);
+    const [total, inactive, addedThisSeason, acresHandled, registeredAcres] = await Promise.all([
+      SubOrganizer.count(),
+      SubOrganizer.count({ where: { status: "Inactive" } }),
+      SubOrganizer.count({ where: { createdAt: { [Op.gte]: season.start, [Op.lt]: season.end } } }),
+      AllotmentVillage.sum("allottedAcres", {
+        where: { subOrganizerId: { [Op.ne]: null } },
+        include: [
+          {
+            model: Allotment,
+            as: "allotment",
+            attributes: [],
+            where: { season: season.season, year: season.year },
+          },
+        ],
+      }),
+      SubOrganizer.sum("acres"),
+    ]);
+
+    return success(res, 200, "Sub organiser summary fetched successfully", {
+      data: {
+        totalSubOrganizers: total,
+        activeSubOrganizers: total - inactive,
+        inactiveSubOrganizers: inactive,
+        addedThisSeason,
+        acresHandled: Number(acresHandled) || 0,
+        registeredAcres: Number(registeredAcres) || 0,
+        season: season.label,
+      },
+    });
+  } catch (err) {
+    next(err);
+  }
+};
+
 module.exports = {
+  getSubOrganizerSummary,
   getAllSubOrganizers,
   getSubOrganizersByVillageId,
   getSubOrganizerById,

@@ -1,5 +1,6 @@
 "use strict";
 const { Model } = require("sequelize");
+const { fileUrlAttribute } = require("../utils/fileUrlAttribute");
 
 module.exports = (sequelize, DataTypes) => {
   class Notification extends Model {
@@ -21,10 +22,9 @@ module.exports = (sequelize, DataTypes) => {
         type: DataTypes.ENUM("L1", "L2", "L3", "All"),
         allowNull: false,
       },
-      message: { type: DataTypes.TEXT, allowNull: false },
-      imageUrl: DataTypes.STRING(500),
-      // Optional downloadable attachment (pdf, doc/docx, xls/xlsx, csv, ...).
-      documentUrl: DataTypes.STRING(500),
+      message: { type: DataTypes.STRING, allowNull: false },
+      imageUrl: fileUrlAttribute(DataTypes, "imageUrl"), 
+      documentUrl: fileUrlAttribute(DataTypes, "documentUrl"),
       documentName: DataTypes.STRING(255), // original file name, used as the download name
     },
     {

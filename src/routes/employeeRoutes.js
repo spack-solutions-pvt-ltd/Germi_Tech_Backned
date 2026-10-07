@@ -1,6 +1,5 @@
 "use strict";
 const { Router } = require("express");
-const multer = require("multer");
 const {
   getEmployeeById,
   getAllEmployees,
@@ -18,20 +17,10 @@ const {
   updateEmployeeInsurance,
   getEmployeeInsurance,
 } = require("../controller/employeeController");
-const { employeeDocumentUpload } = require("../middleWare/upload.middleware");
+// Private S3 upload (employee-documents/) — see upload.middleware.js
+const { employeeDocumentFileUpload } = require("../middleWare/upload.middleware");
 
 const router = Router();
-
-const upload = multer({
-  storage: multer.diskStorage({
-    destination: "src/uploads/employee-documents",
-    filename: (req, file, cb) => {
-      const unique = `${Date.now()}-${Math.round(Math.random() * 1e9)}`;
-      cb(null, `${unique}-${file.originalname}`);
-    },
-  }),
-  limits: { fileSize: 10 * 1024 * 1024 }, // 10MB, matches "One image or PDF file"
-});
 
 // Core
 router.get("/", getAllEmployees);
@@ -46,11 +35,11 @@ router.post("/:id/bank-account", updateBankAccount);
 router.put("/:id/bank-account", updateBankAccount);
 
 //  Documents
-router.post("/:id/documents", upload.single("document"), addEmployeeDocument);
+router.post("/:id/documents", employeeDocumentFileUpload, addEmployeeDocument);
 router.get("/:id/documents/:documentId", getEmployeeDocument);
 router.put(
   "/:id/documents/:documentId",
-  upload.single("document"),
+  employeeDocumentFileUpload,
   updateEmployeeDocument,
 );
 router.get("/:id/documents/:documentId/download", downloadEmployeeDocument);

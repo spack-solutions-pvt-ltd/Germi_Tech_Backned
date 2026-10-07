@@ -23,7 +23,7 @@ module.exports = (sequelize, DataTypes) => {
       companyCropId: DataTypes.STRING,
       companyId: DataTypes.INTEGER,
       cropId: DataTypes.INTEGER,
-      varietyName: DataTypes.STRING(150),
+      varietyName: DataTypes.STRING,
       status: {
         type: DataTypes.ENUM("Active", "Inactive"),
         allowNull: false,

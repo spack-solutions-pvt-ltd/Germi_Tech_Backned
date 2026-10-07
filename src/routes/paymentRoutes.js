@@ -25,6 +25,6 @@ router.get("/filter-options", getPaymentFilterOptions); // created-by / processe
 router.get("/", getPayments); // ?status=pending|processed + filters
 router.get("/:id", getPaymentById); // process / details drawer
 router.put("/:id", canProcess, updatePaymentDetails); // save mode, reference ID, date, remark (Pending only)
-router.put("/:id/process", canProcess, processPayment); // Pending -> Processed
+router.patch("/:id/process", canProcess, processPayment); // Pending -> Processed
 
 module.exports = router;

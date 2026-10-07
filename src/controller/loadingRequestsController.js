@@ -45,7 +45,6 @@ const {
   pickAmounts,
 } = require("../validators/loadingRequestValidator");
 
-const UPLOAD_DIR = "/uploads/loading-requests";
 const OPEN_STATUSES = ["pending", "verified", "partially_approved"];
 const TRANSPORT_FIELDS = ["logisticsPartnerId", "rate", "marketsAmount", "kanttaBill"];
 const HAMALI_FIELDS = ["hamaliAmount"];
@@ -77,7 +76,7 @@ const HEADER_INCLUDES = [
 
 const ENTRY_INCLUDE = {
   model: LoadingRequestEntry,
-  as: "entries",
+  as: "cropEntries",
   separate: true, // own query, so it can't multiply parent rows / break pagination
   include: [
     allotmentVillageInclude("allotmentVillage"),
@@ -89,7 +88,12 @@ const ENTRY_INCLUDE = {
 /* Helpers                                                             */
 /* ------------------------------------------------------------------ */
 
-const fileUrl = (file) => (file ? `${UPLOAD_DIR}/${file.filename}` : null);
+// CloudFront URL set by the S3 upload middleware (S3: loading-requests/).
+const fileUrl = (file) => (file ? file.url : null);
+
+/** { <prefix>Url, <prefix>Name } for an uploaded file, or {} when none was sent. */
+const photoFields = (prefix, file) =>
+  file ? { [`${prefix}Url`]: fileUrl(file), [`${prefix}Name`]: file.originalname } : {};
 
 function parseEntries(raw) {
   if (raw === undefined || raw === null) return undefined;
@@ -97,20 +101,26 @@ function parseEntries(raw) {
   try {
     return JSON.parse(raw);
   } catch {
-    throw httpError(400, "entries must be valid JSON");
+    throw httpError(400, "cropEntries must be valid JSON");
   }
 }
 
 /**
- * Validates loading rows and attaches DK photos. dk_photo files map to rows
- * by index (entries[N] <-> dk_photo[N]); a row can point elsewhere with
- * dkPhotoIndex. On edit, a row without a new file keeps its old photo by
- * sending back its existing dkPhotoUrl.
+ * Validates loading rows and attaches DK photos (url + original name).
+ *
+ * Which dk_photo file belongs to which row:
+ *   - a row with dkPhotoIndex: N gets dk_photo[N] (use this whenever some
+ *     rows have no photo — files are only sent for rows that have one)
+ *   - if no row sends dkPhotoIndex, files map by position: entries[N] <-> dk_photo[N]
+ * On edit, a row without a new file keeps its old photo by sending back its
+ * existing dkPhotoUrl.
  */
-async function buildEntries(rawEntries, requestedBy, dkFiles = [], existingPhotoUrls = []) {
+async function buildEntries(rawEntries, requestedBy, dkFiles = [], existingEntries = []) {
   if (!Array.isArray(rawEntries) || !rawEntries.length) {
     throw httpError(400, "At least one loading row is required");
   }
+  const explicitIndexes = rawEntries.some((e) => e.dkPhotoIndex !== undefined && e.dkPhotoIndex !== null);
+  const existingByUrl = new Map(existingEntries.filter((e) => e.dkPhotoUrl).map((e) => [e.dkPhotoUrl, e]));
   const rows = [];
   for (const [index, entry] of rawEntries.entries()) {
     const row = `Loading ${index + 1}`;
@@ -129,14 +139,21 @@ async function buildEntries(rawEntries, requestedBy, dkFiles = [], existingPhoto
       throw httpError(400, `${row}: the allotment is not assigned to the selected supervisor`);
     }
 
-    const file = dkFiles[entry.dkPhotoIndex ?? index];
-    const keptUrl = existingPhotoUrls.includes(entry.dkPhotoUrl) ? entry.dkPhotoUrl : null;
+    const fileIndex = explicitIndexes ? entry.dkPhotoIndex : index;
+    const file = fileIndex !== undefined && fileIndex !== null ? dkFiles[Number(fileIndex)] : undefined;
+    if (explicitIndexes && fileIndex !== undefined && fileIndex !== null && !file) {
+      throw httpError(400, `${row}: no dk_photo file at index ${fileIndex}`);
+    }
+    const kept = existingByUrl.get(entry.dkPhotoUrl); // edit: keep the old photo
+
     rows.push({
       allotmentVillageId,
       supervisorId,
       noOfBags,
       dkQuantity,
-      dkPhotoUrl: fileUrl(file) || keptUrl,
+      // Keep the stored value (S3 key), not the resolved URL the client sent back.
+      dkPhotoUrl: file ? fileUrl(file) : kept?.getDataValue?.("dkPhotoUrl") ?? kept?.dkPhotoUrl ?? null,
+      dkPhotoName: file ? file.originalname : kept?.dkPhotoName || null,
     });
   }
   return rows;
@@ -171,10 +188,59 @@ async function applyAmounts(request, amounts, transaction) {
   await request.update(amounts, { transaction });
 }
 
-/** Adds totals, the transport/hamali payment state and (for L3) the collapsed status. */
-function decorate(request, { forSupervisor = false } = {}) {
+/* ------------------------------------------------------------------ */
+/* Who sees what                                                       */
+/* ------------------------------------------------------------------ */
+//
+// A loading request belongs to the supervisor who raised it (requestedBy /
+// createdBy). Its rows can also be for OTHER supervisors' allotments
+// (LoadingRequestEntry.supervisorId). Those supervisors see the request in
+// their "my requests" too, but view only — they can't edit, cancel, verify,
+// change amounts or create payments.
+
+/** where: requests I raised, or where at least one loading row is mine. */
+function myRequestsWhere(employeeId) {
+  const id = sequelize.escape(employeeId);
+  return {
+    [Op.or]: [
+      { requestedBy: employeeId },
+      {
+        id: {
+          [Op.in]: sequelize.literal(
+            `(SELECT loadingRequestId FROM \`LoadingRequestEntries\` WHERE supervisorId = ${id})`,
+          ),
+        },
+      },
+    ],
+  };
+}
+
+/** True when the employee only appears as a row supervisor (not the owner). */
+function isViewOnlyFor(json, employeeId) {
+  if (json.requestedBy === employeeId || json.createdBy === employeeId) return false;
+  return (json.cropEntries || []).some((e) => e.supervisorId === employeeId);
+}
+
+/** Blocks every action for a supervisor who only appears on a row of this request. */
+async function assertNotViewOnly(request, employee, transaction) {
+  if (isRequestOwner(request, employee)) return;
+  const myRows = await LoadingRequestEntry.count({
+    where: { loadingRequestId: request.id, supervisorId: employee.id },
+    transaction,
+  });
+  if (myRows) {
+    throw httpError(403, "This request includes your allotment, but it was raised by another supervisor — you can only view it");
+  }
+}
+
+/**
+ * Adds totals, the transport/hamali payment state and (for L3) the collapsed
+ * status. With viewerId, also adds viewOnly: true when that employee only
+ * appears as a row supervisor (the UI hides all actions).
+ */
+function decorate(request, { forSupervisor = false, viewerId = null } = {}) {
   const json = request.toJSON();
-  const amounts = calculateLoadingAmounts(json, json.entries || []);
+  const amounts = calculateLoadingAmounts(json, json.cropEntries || []);
   const required = requiredPaymentTypes(json, amounts);
   const paymentState = (type, amount) => ({
     required: required.includes(type),
@@ -186,6 +252,7 @@ function decorate(request, { forSupervisor = false } = {}) {
   return {
     ...json,
     status: forSupervisor ? toSupervisorStatus(json.status) : json.status,
+    ...(viewerId && { viewOnly: isViewOnlyFor(json, viewerId) }),
     amounts,
     payments: {
       transport: paymentState("transport", amounts.transportAmount),
@@ -228,16 +295,20 @@ async function listLoadingRequests(baseWhere, req, res, next, { forSupervisor = 
     });
 
     const response = buildPaginatedResponse(result, page, limit);
-    response.data = result.rows.map((r) => decorate(r, { forSupervisor }));
+    response.data = result.rows.map((r) => decorate(r, { forSupervisor, viewerId: req.employee.id }));
     return success(res, 200, "Loading requests fetched successfully", response);
   } catch (err) {
     next(err);
   }
 }
 
-/** GET /loading-requests/my-requests — L3: own requests (partially approved shown as approved) */
+/**
+ * GET /loading-requests/my-requests — L3: requests I raised + requests where a
+ * loading row is for my allotment (those come back with viewOnly: true).
+ * Partially approved is shown as approved.
+ */
 async function getMyLoadingRequests(req, res, next) {
-  return listLoadingRequests({ requestedBy: req.employee.id }, req, res, next, { forSupervisor: true });
+  return listLoadingRequests(myRequestsWhere(req.employee.id), req, res, next, { forSupervisor: true });
 }
 
 /** GET /loading-requests — L2 verification / L1 approval list */
@@ -252,7 +323,8 @@ const LOADING_STATUSES = ["pending", "verified", "partially_approved", "approved
 /** GET /loading-requests/my-summary — L3 cards: Pending | Verified | Approved | Canceled (+ total) */
 async function getMyLoadingSummary(req, res, next) {
   try {
-    const c = await summarizeByStatus(LoadingRequest, LOADING_STATUSES, { requestedBy: req.employee.id });
+    // Same set as my-requests: raised by me + ones with a row for my allotment.
+    const c = await summarizeByStatus(LoadingRequest, LOADING_STATUSES, myRequestsWhere(req.employee.id));
     return success(res, 200, "Loading summary fetched successfully", {
       data: {
         total: c.total,
@@ -282,8 +354,11 @@ async function getLoadingRequestById(req, res, next) {
   try {
     const request = await fetchFull(req.params.id);
     if (!request) return error(res, 404, "Loading request not found");
+    const json = request.toJSON();
+    // Supervisors (owner or row supervisor) see the collapsed L3 statuses.
+    const isSupervisorView = isRequestOwner(request, req.employee) || isViewOnlyFor(json, req.employee.id);
     return success(res, 200, "Loading request fetched successfully", {
-      data: decorate(request, { forSupervisor: isRequestOwner(request, req.employee) }),
+      data: decorate(request, { forSupervisor: isSupervisorView, viewerId: req.employee.id }),
     });
   } catch (err) {
     next(err);
@@ -321,8 +396,10 @@ async function getLoadingRequestPayments(req, res, next) {
  * Raised by a supervisor, or on a supervisor's behalf (e.g. from
  * Verifications) by passing requestedBy = that supervisor's id.
  * fields: fromVillageId, toWarehouseId?, transporterName?, hamaliGangName?, note?, requestedBy?,
- *         entries (JSON): [{ allotmentVillageId, supervisorId?, noOfBags, dkQuantity, dkPhotoIndex? }]
- * files:  start_photo, end_photo, dk_photo[] (one per entry, same order)
+ *         cropEntries (JSON): [{ allotmentVillageId, supervisorId?, noOfBags, dkQuantity, dkPhotoIndex? }]
+ * files:  start_photo, end_photo, dk_photo (repeat once per row that has a photo;
+ *         dkPhotoIndex = that file's position among the dk_photo files)
+ * Each photo's original file name is stored next to its URL.
  */
 async function createLoadingRequest(req, res, next) {
   try {
@@ -332,7 +409,7 @@ async function createLoadingRequest(req, res, next) {
     // Defaults to the caller; pass requestedBy to raise it for another supervisor.
     const requestedBy = await resolveRequestOwner(onBehalfOf, req.employee);
     await validateLocations({ fromVillageId, toWarehouseId });
-    const entries = await buildEntries(parseEntries(req.body.entries), requestedBy, req.files?.dk_photo);
+    const entries = await buildEntries(parseEntries(req.body.cropEntries ?? req.body.entries), requestedBy, req.files?.dk_photo);
     const id = await sequelize.transaction(async (t) => {
       const created = await LoadingRequest.create(
         {
@@ -343,8 +420,8 @@ async function createLoadingRequest(req, res, next) {
           transporterName: transporterName || null,
           hamaliGangName: hamaliGangName || null,
           note: note || null,
-          startPhotoUrl: fileUrl(req.files?.start_photo?.[0]),
-          endPhotoUrl: fileUrl(req.files?.end_photo?.[0]),
+          ...photoFields("startPhoto", req.files?.start_photo?.[0]),
+          ...photoFields("endPhoto", req.files?.end_photo?.[0]),
           status: "pending",
         },
         { transaction: t },
@@ -380,19 +457,16 @@ async function updateLoadingRequest(req, res, next) {
     const { fromVillageId, toWarehouseId, transporterName, hamaliGangName, note } = req.body;
     await validateLocations({ fromVillageId, toWarehouseId });
 
-    const rawEntries = parseEntries(req.body.entries);
+    const rawEntries = parseEntries(req.body.cropEntries ?? req.body.entries);
     const entries =
       rawEntries !== undefined
         ? await buildEntries(
             rawEntries,
             request.requestedBy,
             req.files?.dk_photo,
-            request.entries.map((e) => e.dkPhotoUrl).filter(Boolean),
+            request.cropEntries,
           )
         : undefined;
-
-    const startPhoto = req.files?.start_photo?.[0];
-    const endPhoto = req.files?.end_photo?.[0];
 
     await sequelize.transaction(async (t) => {
       await request.update(
@@ -402,8 +476,8 @@ async function updateLoadingRequest(req, res, next) {
           ...(transporterName !== undefined && { transporterName }),
           ...(hamaliGangName !== undefined && { hamaliGangName }),
           ...(note !== undefined && { note }),
-          ...(startPhoto && { startPhotoUrl: fileUrl(startPhoto) }),
-          ...(endPhoto && { endPhotoUrl: fileUrl(endPhoto) }),
+          ...photoFields("startPhoto", req.files?.start_photo?.[0]), // a new file replaces the old one
+          ...photoFields("endPhoto", req.files?.end_photo?.[0]),
         },
         { transaction: t },
       );
@@ -452,6 +526,7 @@ async function updateLoadingAmounts(req, res, next) {
 
     await sequelize.transaction(async (t) => {
       const request = await lockRequest(req.params.id, t);
+      await assertNotViewOnly(request, req.employee, t); // row supervisors can only view
       if (!OPEN_STATUSES.includes(request.status)) {
         throw httpError(409, `Amounts can't be changed on a ${request.status} request`);
       }
@@ -476,6 +551,7 @@ async function verifyLoadingRequest(req, res, next) {
 
     await sequelize.transaction(async (t) => {
       const request = await lockRequest(req.params.id, t);
+      await assertNotViewOnly(request, req.employee, t); // row supervisors can only view
       assertNotRequestOwner(request, req.employee, "verify");
       if (request.status !== "pending") {
         throw httpError(409, `Cannot verify a request with status "${request.status}"`);
@@ -501,6 +577,7 @@ async function cancelLoadingRequest(req, res, next) {
   try {
     await sequelize.transaction(async (t) => {
       const request = await lockRequest(req.params.id, t);
+      await assertNotViewOnly(request, req.employee, t); // row supervisors can only view
       if (!["pending", "verified"].includes(request.status)) {
         throw httpError(409, `Cannot cancel a request with status "${request.status}"`);
       }
@@ -573,6 +650,7 @@ async function createLoadingPayments(req, res, next) {
 
     const result = await sequelize.transaction(async (t) => {
       const request = await lockRequest(req.params.id, t);
+      await assertNotViewOnly(request, req.employee, t); // row supervisors can only view
       assertNotRequestOwner(request, req.employee, "approve");
       if (request.status === "approved") throw httpError(409, "All payments for this request are already created");
       if (!OPEN_STATUSES.includes(request.status)) {
@@ -623,7 +701,30 @@ async function createLoadingPayments(req, res, next) {
   }
 }
 
+/**
+ * GET /loading-requests/warehouses?search= — "To location (warehouse)" dropdown.
+ * Returns [{ id, warehouseId, locationName }].
+ */
+async function getLoadingWarehouses(req, res, next) {
+  try {
+    const where = {};
+    if (req.query.search) {
+      const term = `%${req.query.search.trim()}%`;
+      where[Op.or] = [{ locationName: { [Op.like]: term } }, { warehouseId: { [Op.like]: term } }];
+    }
+    const data = await Warehouse.findAll({
+      where,
+      attributes: ["id", "warehouseId", "locationName"],
+      order: [["locationName", "ASC"]],
+    });
+    return success(res, 200, "Warehouses fetched successfully", { data });
+  } catch (err) {
+    next(err);
+  }
+}
+
 module.exports = {
+  getLoadingWarehouses,
   getMyLoadingRequests,
   getAllLoadingRequests,
   getMyLoadingSummary,

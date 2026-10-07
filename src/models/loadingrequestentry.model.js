@@ -1,5 +1,6 @@
 "use strict";
 const { Model } = require("sequelize");
+const { fileUrlAttribute } = require("../utils/fileUrlAttribute");
 
 module.exports = (sequelize, DataTypes) => {
   // One "Loading N" row. The allotment carries village -> crop -> variety;
@@ -19,7 +20,8 @@ module.exports = (sequelize, DataTypes) => {
       supervisorId: DataTypes.INTEGER,
       noOfBags: { type: DataTypes.INTEGER, allowNull: false, defaultValue: 0 },
       dkQuantity: { type: DataTypes.DECIMAL(12, 2), allowNull: false, defaultValue: 0 }, // charged weight (kgs)
-      dkPhotoUrl: DataTypes.STRING(500),
+      dkPhotoUrl: fileUrlAttribute(DataTypes, "dkPhotoUrl"), // S3 key (or legacy /uploads path); reads return the viewable URL
+      dkPhotoName: DataTypes.STRING(255), // original file name, e.g. "dk-slip.jpg"
     },
     {
       sequelize,

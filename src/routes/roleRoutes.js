@@ -18,7 +18,6 @@ router.get("/:id", getRoleById);
 router.post("/", createRole);
 router.put("/:id", updateRole);
 router.patch("/status/:roleId", updateRoleStatus);
-// router.get("/me/permissions", );
 
 
 module.exports = router;

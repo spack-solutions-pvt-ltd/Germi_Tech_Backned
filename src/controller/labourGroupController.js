@@ -86,8 +86,10 @@ async function getLaborGroupById(req, res, next) {
 
     if (!laborGroup) return error(res, 404, "Labor group not found");
 
+    const totals = await getGroupPaymentTotals(laborGroup.id, resolveSeason(req.query));
+
     return success(res, 200, "Labor group fetched successfully", {
-      data: laborGroup,
+      data: { ...laborGroup.toJSON(), ...totals },
     });
   } catch (err) {
     next(err);
@@ -318,6 +320,26 @@ async function sumPayments(where) {
 }
 
 /**
+ * One group's payment totals for the details card:
+ *   wagesDue       — its payments still pending
+ *   paidThisSeason — processed with a payment date inside `season`
+ *   paidTotal      — processed, all time
+ */
+async function getGroupPaymentTotals(groupId, season) {
+  const groupWhere = { recipientType: "labor_group", recipientId: groupId };
+  const [wagesDue, paidThisSeason, paidTotal] = await Promise.all([
+    sumPayments({ ...groupWhere, status: "pending" }),
+    sumPayments({
+      ...groupWhere,
+      status: "processed",
+      paymentDate: { [Op.gte]: toDateOnly(season.start), [Op.lt]: toDateOnly(season.end) },
+    }),
+    sumPayments({ ...groupWhere, status: "processed" }),
+  ]);
+  return { wagesDue, paidThisSeason, paidTotal, season: season.label };
+}
+
+/**
  * GET /labour-groups/summary?season=&year= — Labour groups page KPI cards.
  * wagesDue       = labour payments still pending
  * paidThisSeason = labour payments processed with a payment date in the
@@ -349,8 +371,8 @@ async function getLaborGroupSummary(req, res, next) {
 
 /**
  * GET /labour-groups/:id/payments?page=&limit=&status=pending|processed
- * Payments history for one labour group, plus its wagesDue (pending) and
- * paidTotal (processed) for the details card.
+ * Payments history for one labour group, plus `totals`
+ * { wagesDue, paidThisSeason, paidTotal, season } (see getGroupPaymentTotals).
  * Each row: paymentCode, requestedBy (supervisor who raised the labour
  * request), approvedBy (who created the payment), processedBy, amount,
  * date, mode, status, sourceCode.
@@ -360,12 +382,11 @@ async function getLaborGroupPayments(req, res, next) {
     const group = await LaborGroup.findByPk(req.params.id, { attributes: ["id"] });
     if (!group) return error(res, 404, "Labour group not found");
 
-    const groupWhere = { recipientType: "labor_group", recipientId: group.id };
-    const where = { ...groupWhere };
+    const where = { recipientType: "labor_group", recipientId: group.id };
     if (["pending", "processed"].includes(req.query.status)) where.status = req.query.status;
 
     const { page, limit, offset } = getPagination(req.query);
-    const [result, wagesDue, paidTotal] = await Promise.all([
+    const [result, totals] = await Promise.all([
       Payment.findAndCountAll({
         where,
         include: [
@@ -376,8 +397,7 @@ async function getLaborGroupPayments(req, res, next) {
         limit,
         offset,
       }),
-      sumPayments({ ...groupWhere, status: "pending" }),
-      sumPayments({ ...groupWhere, status: "processed" }),
+      getGroupPaymentTotals(group.id, resolveSeason(req.query)),
     ]);
 
     // "Requested by" = the supervisor on the labour request each payment came from.
@@ -412,7 +432,7 @@ async function getLaborGroupPayments(req, res, next) {
         processedAt: p.processedAt,
       };
     });
-    response.totals = { wagesDue, paidTotal };
+    response.totals = totals;
 
     return success(res, 200, "Labour group payments fetched successfully", response);
   } catch (err) {

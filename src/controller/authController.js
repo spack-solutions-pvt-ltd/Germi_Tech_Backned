@@ -14,6 +14,7 @@ const {
   revokeAllRefreshTokens,
 } = require("../utils/refreshToken");
 const { success, error } = require("../utils/response");
+const { getMyNotificationCounts } = require("../utils/notificationCounts");
 const { v4: uuidv4 } = require("uuid");
 const {
   getEffectivePermissionCodes,
@@ -384,10 +385,10 @@ const getUserDetails = async (req, res, next) => {
     if (!employee) return error(res, 404, "Employee not found");
 
     const rolePermissions = employee.role ? employee.role.permissions : [];
-    const effectiveCodes = await getEffectivePermissionCodes(
-      employee.id,
-      rolePermissions,
-    );
+    const [effectiveCodes, notificationCounts] = await Promise.all([
+      getEffectivePermissionCodes(employee.id, rolePermissions),
+      getMyNotificationCounts(employee), // bell badge
+    ]);
 
     const {
       password,
@@ -409,6 +410,7 @@ const getUserDetails = async (req, res, next) => {
             }
           : null,
         permissions: Array.from(effectiveCodes),
+        unreadNotificationCount: notificationCounts.unread,
       },
     });
   } catch (err) {

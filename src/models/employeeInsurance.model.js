@@ -24,7 +24,7 @@ module.exports = (sequelize, DataTypes) => {
       },
       // Custom name typed in when type = "other" (same pattern as
       // EmployeeDocument.label for its "Others" option).
-      otherTypeName: DataTypes.STRING(150),
+      otherTypeName: DataTypes.STRING,
       provider: DataTypes.STRING(150),
       startDate: DataTypes.DATEONLY,
       expiryDate: DataTypes.DATEONLY,

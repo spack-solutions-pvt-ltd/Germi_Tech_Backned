@@ -1,6 +1,7 @@
 "use strict";
 const { Router } = require("express");
 const {
+  getNotificationsSummary,
   getAllNotifications,
   getMyNotifications,
   downloadNotificationDocument,
@@ -14,8 +15,9 @@ const { notificationUpload } = require("../middleWare/upload.middleware");
 
 const router = Router();
 
+router.get("/summary", getNotificationsSummary);
 router.get("/", getAllNotifications);
-router.get("/my-notifications", getMyNotifications); // for the logged-in user's level (+ "All")
+router.get("/my-notifications", getMyNotifications);
 router.get("/:id", getNotificationById);
 router.get("/:id/document", downloadNotificationDocument);
 router.post("/", notificationUpload, createNotification); // files: image?, document?

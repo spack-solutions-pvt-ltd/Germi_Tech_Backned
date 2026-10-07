@@ -17,7 +17,7 @@ module.exports = (sequelize, DataTypes) => {
       toStatus: { type: DataTypes.STRING(20), allowNull: false },
       changedBy: DataTypes.INTEGER,
       bagsCount: DataTypes.INTEGER,
-      note: DataTypes.TEXT,
+      note: DataTypes.STRING,
     },
     {
       sequelize,

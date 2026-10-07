@@ -1,8 +1,13 @@
 "use strict";
 const { Router } = require("express");
 const { loadingRequestUpload } = require("../middleWare/requestUpload.middleware");
-const { getMyAssignedAllotmentVillages } = require("../controller/allotmentController");
 const {
+  getMyAssignedAllotmentVillages,
+  getAllotmentVillagesBySupervisor,
+  getSupervisorOptions,
+} = require("../controller/allotmentController");
+const {
+  getLoadingWarehouses,
   getMyLoadingRequests,
   getAllLoadingRequests,
   getMyLoadingSummary,
@@ -23,7 +28,10 @@ const router = Router();
 // Requests → Loading (own requests)
 router.get("/my-requests", getMyLoadingRequests);
 router.get("/my-summary", getMyLoadingSummary);
-router.get("/allotment-villages", getMyAssignedAllotmentVillages); // "Allotment" dropdown
+router.get("/allotment-villages", getMyAssignedAllotmentVillages); // "Allotment" dropdown — my own (Self)
+router.get("/supervisors", getSupervisorOptions); // "Supervisor" dropdown on a loading row
+router.get("/supervisors/:supervisorId/allotment-villages", getAllotmentVillagesBySupervisor); // that supervisor's allotments
+router.get("/warehouses", getLoadingWarehouses); // "To location (warehouse)" dropdown
 
 // Verifications / Approvals
 router.get("/summary", getLoadingSummary);

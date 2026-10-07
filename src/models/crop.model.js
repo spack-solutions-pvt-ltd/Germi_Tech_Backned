@@ -18,9 +18,9 @@ module.exports = (sequelize, DataTypes) => {
   Crop.init(
     {
       cropId: DataTypes.STRING,
-      name: { type: DataTypes.STRING(100), allowNull: false, unique: true },
-      description: DataTypes.TEXT,
-      duration: DataTypes.STRING(50),
+      name: { type: DataTypes.STRING, unique: true },
+      description: DataTypes.STRING,
+      duration: DataTypes.STRING,
       status: {
         type: DataTypes.ENUM("Active", "Inactive"),
         allowNull: false,

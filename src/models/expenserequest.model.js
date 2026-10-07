@@ -1,5 +1,6 @@
 "use strict";
 const { Model } = require("sequelize");
+const { fileUrlAttribute } = require("../utils/fileUrlAttribute");
 
 module.exports = (sequelize, DataTypes) => {
   class ExpenseRequest extends Model {
@@ -34,8 +35,8 @@ module.exports = (sequelize, DataTypes) => {
       createdBy: DataTypes.INTEGER, // who actually submitted it — usually same as requestedBy, differs when L1/L2 create it on a supervisor's behalf
       purpose: { type: DataTypes.STRING(255), allowNull: false },
       amount: { type: DataTypes.DECIMAL(12, 2), allowNull: false },
-      billUrl: DataTypes.STRING(500),
-      note: DataTypes.TEXT,
+      billUrl: fileUrlAttribute(DataTypes, "billUrl"), // S3 key (or legacy /uploads path); reads return the viewable URL
+      note: DataTypes.STRING,
       status: {
         // paid = its Payment has been processed (set by the payments module)
         type: DataTypes.ENUM("pending", "verified", "approved", "rejected", "paid"),
@@ -48,7 +49,7 @@ module.exports = (sequelize, DataTypes) => {
       approvedAt: DataTypes.DATE,
       rejectedBy: DataTypes.INTEGER,
       rejectedStage: DataTypes.ENUM("verification", "approval"),
-      rejectionReason: DataTypes.TEXT,
+      rejectionReason: DataTypes.STRING,
     },
     {
       sequelize,

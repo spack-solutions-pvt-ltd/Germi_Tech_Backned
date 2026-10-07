@@ -1,5 +1,6 @@
 "use strict";
 const { Model } = require("sequelize");
+const { fileUrlAttribute } = require("../utils/fileUrlAttribute");
 
 module.exports = (sequelize, DataTypes) => {
   // Loading done at a village for a warehouse dispatch, raised by L3.
@@ -21,7 +22,7 @@ module.exports = (sequelize, DataTypes) => {
       this.belongsTo(models.Payment, { foreignKey: "hamaliPaymentId", as: "hamaliPayment" });
       this.hasMany(models.LoadingRequestEntry, {
         foreignKey: "loadingRequestId",
-        as: "entries",
+        as: "cropEntries",
         onDelete: "CASCADE",
       });
     }
@@ -34,11 +35,13 @@ module.exports = (sequelize, DataTypes) => {
       createdBy: DataTypes.INTEGER, // who actually submitted it
       fromVillageId: DataTypes.INTEGER,
       toWarehouseId: DataTypes.INTEGER,
-      startPhotoUrl: DataTypes.STRING(500),
-      endPhotoUrl: DataTypes.STRING(500),
-      transporterName: DataTypes.STRING(150), // free text typed by L3
-      hamaliGangName: DataTypes.STRING(150), // free text typed by L3 — the Hamali payment recipient
-      note: DataTypes.TEXT,
+      startPhotoUrl: fileUrlAttribute(DataTypes, "startPhotoUrl"), // S3 key (or legacy /uploads path); reads return the viewable URL
+      startPhotoName: DataTypes.STRING(255), // original file name
+      endPhotoUrl: fileUrlAttribute(DataTypes, "endPhotoUrl"),
+      endPhotoName: DataTypes.STRING(255), // original file name
+      transporterName: DataTypes.STRING, // free text typed by L3
+      hamaliGangName: DataTypes.STRING, // free text typed by L3 — the Hamali payment recipient
+      note: DataTypes.STRING,
 
       // --- Amounts (entered by L2 at verification, editable by L1) ---
       logisticsPartnerId: DataTypes.INTEGER, // "Transport name" — the Transport payment recipient

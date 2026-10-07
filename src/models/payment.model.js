@@ -62,7 +62,7 @@ module.exports = (sequelize, DataTypes) => {
         allowNull: false,
       },
       recipientId: DataTypes.INTEGER,
-      recipientName: DataTypes.STRING(150), // snapshot name, used when there's no recipientId to join on (e.g. hamali gang)
+      recipientName: DataTypes.STRING, // snapshot name, used when there's no recipientId to join on (e.g. hamali gang)
       amount: { type: DataTypes.DECIMAL(12, 2), allowNull: false },
       createdBy: DataTypes.INTEGER, // who created it (approver of the source request); null when system-created (insurance)
       status: {
@@ -72,9 +72,9 @@ module.exports = (sequelize, DataTypes) => {
       },
       // Processing details — editable while pending.
       paymentMode: DataTypes.ENUM("bank", "upi", "cash"),
-      referenceId: DataTypes.STRING(100),
+      referenceId: DataTypes.STRING,
       paymentDate: DataTypes.DATEONLY,
-      remark: DataTypes.TEXT,
+      remark: DataTypes.STRING,
       processedBy: DataTypes.INTEGER, // who marked it processed
       processedAt: DataTypes.DATE,
     },

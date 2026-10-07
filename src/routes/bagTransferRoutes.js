@@ -34,6 +34,6 @@ router.get("/", getAllBagsTransfers); // Verifications → Bags
 router.get("/:id", getBagsTransferById);
 router.post("/", createBagsTransfer); // Send bags (senderId? = on a supervisor's behalf)
 router.put("/:id", updateBagsTransfer); // sender / creator, Pending only
-router.put("/:id/status", updateBagsTransferStatus); // received | not_received | cancelled
+router.patch("/:id/status", updateBagsTransferStatus); // received | not_received | cancelled
 
 module.exports = router;

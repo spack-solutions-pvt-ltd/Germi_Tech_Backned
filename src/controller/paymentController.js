@@ -15,9 +15,13 @@ const {
   missingProcessDetails,
 } = require("../validators/paymentValidator");
 const {
+  PAYMENT_TYPES,
   PAYMENT_STATUSES,
   typeFilterValues,
 } = require("../constants/payments");
+
+// Types offered in the filter ("expense" is only the legacy name of "supervisor").
+const SELECTABLE_TYPES = Object.keys(PAYMENT_TYPES).filter((t) => t !== "expense");
 
 const EMP_ATTRS = ["id", "empId", "name", "level"];
 
@@ -31,19 +35,68 @@ function dayRange(date) {
   return [new Date(`${date}T00:00:00`), new Date(`${date}T23:59:59.999`)];
 }
 
+const DATE_ONLY = /^\d{4}-\d{2}-\d{2}$/;
+
+/** "labour,transport" -> ["labour", "transport"] (+ legacy "expense" for supervisor). Throws on unknown types. */
+function parseTypes(type) {
+  const types = String(type).split(",").map((t) => t.trim().toLowerCase()).filter(Boolean);
+  const unknown = types.filter((t) => !PAYMENT_TYPES[t]);
+  if (unknown.length) {
+    throw httpError(400, `Unknown payment type: ${unknown.join(", ")}. Use: ${SELECTABLE_TYPES.join(", ")}`);
+  }
+  return [...new Set(types.flatMap(typeFilterValues))];
+}
+
+/** Types whose value or label matches the search text ("lab" -> labour, "hamali" -> hamali). */
+function typesMatching(text) {
+  const term = text.toLowerCase();
+  return Object.entries(PAYMENT_TYPES)
+    .filter(([value, { label }]) => value.includes(term) || label.toLowerCase().includes(term))
+    .map(([value]) => value);
+}
+
+function assertDate(name, value) {
+  if (value && !DATE_ONLY.test(value)) throw httpError(400, `${name} must be YYYY-MM-DD`);
+}
+
 /**
  * Builds the list `where` from query params:
- * status, type, createdBy, processedBy, date, search.
- * date matches the created day on Pending, the payment date on Processed.
+ *   status          pending | processed
+ *   type            one or more, comma separated: supervisor,labour,transport,hamali,insurance
+ *   createdBy       employee id
+ *   processedBy     employee id
+ *   paymentDate     exact payment date (YYYY-MM-DD)
+ *   paymentDateFrom / paymentDateTo   payment date range (inclusive)
+ *   date            created day on Pending, payment date on Processed (kept for the existing UI)
+ *   code            payment code only, partial match (e.g. "PY-LB" or "0012")
+ *   search          payment code, reference ID, recipient, source request code,
+ *                   creator / processor names, and type labels ("labour", "hamali")
  */
 async function buildListWhere(query) {
-  const { status, type, createdBy, processedBy, date, search } = query;
-  const and = [];
+  const {
+    status, type, createdBy, processedBy, date, search, code,
+    paymentDate, paymentDateFrom, paymentDateTo,
+  } = query;
+  assertDate("date", date);
+  assertDate("paymentDate", paymentDate);
+  assertDate("paymentDateFrom", paymentDateFrom);
+  assertDate("paymentDateTo", paymentDateTo);
 
+  const and = [];
   if (status) and.push({ status });
-  if (type) and.push({ type: typeFilterValues(type) });
+  if (type) and.push({ type: parseTypes(type) });
   if (createdBy) and.push({ createdBy });
   if (processedBy) and.push({ processedBy });
+
+  if (paymentDate) and.push({ paymentDate });
+  if (paymentDateFrom || paymentDateTo) {
+    and.push({
+      paymentDate: {
+        ...(paymentDateFrom && { [Op.gte]: paymentDateFrom }),
+        ...(paymentDateTo && { [Op.lte]: paymentDateTo }),
+      },
+    });
+  }
   if (date) {
     and.push(
       status === "processed"
@@ -51,7 +104,19 @@ async function buildListWhere(query) {
         : { createdAt: { [Op.between]: dayRange(date) } },
     );
   }
-  if (search) and.push(await buildPaymentSearch(search.trim()));
+
+  if (code) and.push({ paymentCode: { [Op.like]: `%${code.trim()}%` } });
+
+  if (search) {
+    const term = search.trim();
+    const searchWhere = await buildPaymentSearch(term);
+    const matchingTypes = typesMatching(term);
+    and.push(
+      matchingTypes.length
+        ? { [Op.or]: [searchWhere, { type: matchingTypes.flatMap(typeFilterValues) }] }
+        : searchWhere,
+    );
+  }
 
   return { [Op.and]: and };
 }
@@ -76,8 +141,9 @@ async function lockPendingPayment(id, t) {
 /* ------------------------------------------------------------------ */
 
 /**
- * GET /payments?status=pending|processed&type=&createdBy=&processedBy=&date=YYYY-MM-DD&search=&page=&limit=
+ * GET /payments?status=&type=&createdBy=&processedBy=&paymentDate=&paymentDateFrom=&paymentDateTo=&date=&code=&search=&page=&limit=
  * Pending tab -> status=pending, Approved tab -> status=processed.
+ * Filters are described on buildListWhere.
  */
 async function getPayments(req, res, next) {
   try {
@@ -122,6 +188,7 @@ async function getPaymentSummary(req, res, next) {
     });
 
     const pendingByType = {};
+    const proccessedByType = {}
     const totals = { pending: { count: 0, amount: 0 }, processed: { count: 0, amount: 0 } };
     for (const row of rows) {
       const type = row.type === "expense" ? "supervisor" : row.type;
@@ -135,6 +202,12 @@ async function getPaymentSummary(req, res, next) {
           amount: (pendingByType[type]?.amount || 0) + amount,
         };
       }
+      if (row.status === "processed") {
+        proccessedByType[type] = {
+          count: (proccessedByType[type]?.count || 0) + count,
+          amount: (proccessedByType[type]?.amount || 0) + amount,
+        };
+      }
     }
 
     return success(res, 200, "Payment summary fetched successfully", {
@@ -146,6 +219,8 @@ async function getPaymentSummary(req, res, next) {
         pendingByType,
         processedPayments: totals.processed.count,
         processedAmount: totals.processed.amount,
+        processedLabourAmount:proccessedByType.labour?.amount || 0,
+        processedInsuranceAmount:proccessedByType.insurance?.amount || 0
       },
     });
   } catch (err) {

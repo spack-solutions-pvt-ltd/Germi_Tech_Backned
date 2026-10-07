@@ -1,5 +1,6 @@
 "use strict";
 const { Model } = require("sequelize");
+const { fileUrlAttribute } = require("../utils/fileUrlAttribute");
 
 module.exports = (sequelize, DataTypes) => {
   // Header for a labour work-order raised by a supervisor. Each crop entry
@@ -28,10 +29,10 @@ module.exports = (sequelize, DataTypes) => {
       createdBy: DataTypes.INTEGER, // who actually submitted it — usually same as requestedBy, differs when L1/L2 create it on a supervisor's behalf
       laborGroupId: DataTypes.INTEGER, // nullable — see otherLaborGroupName
       otherLaborGroupName: DataTypes.STRING(150), // used when "Others" is picked instead of a real LaborGroup
-      fromLocation: DataTypes.STRING(255),
-      toLocation: DataTypes.STRING(255),
-      startPhotoUrl: DataTypes.STRING(500),
-      endPhotoUrl: DataTypes.STRING(500),
+      fromLocation: DataTypes.STRING,
+      toLocation: DataTypes.STRING,
+      startPhotoUrl: fileUrlAttribute(DataTypes, "startPhotoUrl", 255), // S3 key (or legacy /uploads path); reads return the viewable URL
+      endPhotoUrl: fileUrlAttribute(DataTypes, "endPhotoUrl", 255),
       transportType: DataTypes.ENUM("full_day", "half_day", "up_and_down"),
       transportCost: { type: DataTypes.DECIMAL(10, 2), allowNull: false, defaultValue: 0 }, // set by L2 at verification, added to the payment at approval
       notes: DataTypes.TEXT,
