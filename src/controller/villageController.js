@@ -1,7 +1,7 @@
 "use strict";
 const { Op } = require("sequelize");
 const { Village, SubOrganizer, Employee, AllotmentVillage, Allotment } = require("../models");
-const { startOfCurrentMonth, resolveSeason } = require("../utils/periods");
+const { startOfCurrentMonth, allotmentScope } = require("../utils/periods");
 const {
   getPagination,
   buildPaginatedResponse,
@@ -90,7 +90,39 @@ const getVillageById = async (req, res, next) => {
 
     if (!village) return error(res, 404, "Village not found");
 
-    return success(res, 200, "Village fetched successfully", { data: village });
+    // Acres mapped + assigned supervisors, from this village's allotments
+    // (open allotments by default; ?season=&year= for one season).
+    const scope = allotmentScope(req.query);
+    const allotmentVillages = await AllotmentVillage.findAll({
+      where: { villageId: village.id },
+      attributes: ["id", "supervisorId", "allottedAcres"],
+      include: [
+        { model: Allotment, as: "allotment", attributes: [], where: scope.where },
+        { model: Employee, as: "supervisor", attributes: ["id", "empId", "name", "level", "number"] },
+      ],
+    });
+
+    const supervisors = new Map(); // supervisorId -> { ...employee, allottedAcres, allotments }
+    for (const av of allotmentVillages) {
+      if (!av.supervisor) continue;
+      const entry = supervisors.get(av.supervisorId) || {
+        ...av.supervisor.toJSON(),
+        allottedAcres: 0,
+        allotments: 0,
+      };
+      entry.allottedAcres += Number(av.allottedAcres) || 0;
+      entry.allotments += 1;
+      supervisors.set(av.supervisorId, entry);
+    }
+
+    return success(res, 200, "Village fetched successfully", {
+      data: {
+        ...village.toJSON(),
+        acresMapped: allotmentVillages.reduce((sum, av) => sum + (Number(av.allottedAcres) || 0), 0),
+        assignedSupervisors: [...supervisors.values()],
+        scope: scope.label,
+      },
+    });
   } catch (err) {
     next(err);
   }
@@ -167,27 +199,17 @@ const updatevillageStatusById = async (req, res, next) => {
   }
 };
 /**
- * GET /village/summary?season=&year= — Villages page KPI cards.
- * acresMapped = allotted acres across every village allotment whose
- * allotment is in the season (current season unless ?season=&year= given).
+ * GET /village/summary — Villages page KPI cards.
+ * acresMapped = total acres of all sub organisers across villages — the same
+ * source as each village row's totalAcresAssigned in the list.
  */
 const getVillageSummary = async (req, res, next) => {
   try {
-    const season = resolveSeason(req.query);
     const [totalVillages, inactiveVillages, newThisMonth, acresMapped] = await Promise.all([
       Village.count(),
       Village.count({ where: { status: "Inactive" } }),
       Village.count({ where: { createdAt: { [Op.gte]: startOfCurrentMonth() } } }),
-      AllotmentVillage.sum("allottedAcres", {
-        include: [
-          {
-            model: Allotment,
-            as: "allotment",
-            attributes: [],
-            where: { season: season.season, year: season.year },
-          },
-        ],
-      }),
+      SubOrganizer.sum("acres"),
     ]);
 
     return success(res, 200, "Village summary fetched successfully", {
@@ -197,7 +219,6 @@ const getVillageSummary = async (req, res, next) => {
         inactiveVillages,
         newThisMonth,
         acresMapped: Number(acresMapped) || 0,
-        season: season.label,
       },
     });
   } catch (err) {

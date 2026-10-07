@@ -89,8 +89,32 @@ const getLogisticsPartnerById = async (req, res, next) => {
     });
     if (!partner) return error(res, 404, "Logistics partner not found");
 
+    // Details cards: trips this month + this partner's unpaid transport bills.
+    const pendingBillsWhere = {
+      type: "transport",
+      status: "pending",
+      recipientType: "logistics_partner",
+      recipientId: partner.id,
+    };
+    const [tripsThisMonth, pendingBills, pendingBillsAmount] = await Promise.all([
+      VehicleRequest.count({
+        where: {
+          logisticsPartnerId: partner.id,
+          status: "assigned",
+          createdAt: { [Op.gte]: startOfCurrentMonth() },
+        },
+      }),
+      Payment.count({ where: pendingBillsWhere }),
+      Payment.sum("amount", { where: pendingBillsWhere }),
+    ]);
+
     return success(res, 200, "Logistics partner fetched successfully", {
-      data: partner,
+      data: {
+        ...partner.toJSON(),
+        tripsThisMonth,
+        pendingBills,
+        pendingBillsAmount: Number(pendingBillsAmount) || 0,
+      },
     });
   } catch (err) {
     next(err);

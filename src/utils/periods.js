@@ -44,4 +44,17 @@ function resolveSeason(query = {}) {
 const toDateOnly = (d) =>
   `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 
-module.exports = { startOfCurrentMonth, seasonOf, seasonRange, resolveSeason, toDateOnly };
+/**
+ * Which allotments acre figures cover: a given season (?season=&year=), or
+ * every open allotment by default. Returns { where, label } — where is for
+ * the Allotment model.
+ */
+function allotmentScope(query = {}) {
+  const { season, year } = query;
+  if (SEASONS.includes(season) && Number(year)) {
+    return { where: { season, year: Number(year) }, label: `${season} ${year}` };
+  }
+  return { where: { status: "open" }, label: "Open allotments" };
+}
+
+module.exports = { startOfCurrentMonth, seasonOf, seasonRange, resolveSeason, toDateOnly, allotmentScope };

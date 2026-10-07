@@ -594,9 +594,9 @@ async function updateVillageAllotment(req, res, next) {
  * plus a sub-caption "Village -> Crop -> Variety". Shared by "my allotments"
  * and "allotments of supervisor X" so both return the same shape.
  */
-async function findAllotmentOptions(supervisorId) {
+async function findAllotmentOptions(supervisorId, { status } = {}) {
   const rows = await AllotmentVillage.findAll({
-    where: { supervisorId },
+    where: { supervisorId, ...(status && { status }) },
     include: [
       {
         model: Village,
@@ -643,18 +643,29 @@ const getMyAssignedAllotmentVillages = async (req, res, next) => {
 };
 
 /**
- * GET .../supervisors/:supervisorId/allotment-villages — another supervisor's
- * allotments (e.g. a loading row for a different supervisor). Same shape as
- * getMyAssignedAllotmentVillages.
+ * Allotment-villages assigned to a supervisor, in the dropdown shape of
+ * getMyAssignedAllotmentVillages. Used by:
+ *   GET /allotment-villages                     — logged-in user's
+ *   GET /allotment-villages?supervisorId=5      — that supervisor's
+ *   GET /allotment-villages/:supervisorId       — same, as a path param
+ *   GET /loading-requests/supervisors/:supervisorId/allotment-villages
+ * Optional ?status=open|closed.
  */
 const getAllotmentVillagesBySupervisor = async (req, res, next) => {
   try {
-    const supervisor = await Employee.findByPk(req.params.supervisorId, {
+    // Whose allotments: /:supervisorId, ?supervisorId=, or the logged-in user.
+    const supervisorId = req.params.supervisorId || req.query.supervisorId || req.employee.id;
+    const { status } = req.query;
+    if (status && !["open", "closed"].includes(status)) {
+      return error(res, 400, "status must be open or closed");
+    }
+
+    const supervisor = await Employee.findByPk(supervisorId, {
       attributes: ["id", "empId", "name", "level"],
     });
     if (!supervisor) return error(res, 404, "Supervisor not found");
 
-    const options = await findAllotmentOptions(supervisor.id);
+    const options = await findAllotmentOptions(supervisor.id, { status });
     return success(res, 200, "Supervisor allotment-villages fetched successfully", {
       supervisor,
       data: options,

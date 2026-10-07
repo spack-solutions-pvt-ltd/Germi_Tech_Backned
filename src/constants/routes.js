@@ -33,7 +33,9 @@ const indexRoutes = {
   bagRequests:"/bag-requests",
   bagTransfers:"/bag-transfers",
   payments:"/payments",
-  allFields:"/all-fields"
+  dashboard:"/dashboard",
+  allFields:"/all-fields",
+  allotmentVillages:"/allotment-villages"
 };
 
 module.exports = {

@@ -123,7 +123,7 @@ async function createExpenseRequest(req, res, next) {
       createdBy: req.employee.id,
       purpose,
       amount,
-      billUrl: bill ? bill.url : null, // CloudFront URL (S3: expense-requests/)
+      billUrl: bill ? bill.key : null, // S3 key (or local /uploads path)
       note,
       status: "pending",
     });
@@ -166,7 +166,7 @@ const updateExpenseRequest = async (req, res, next) => {
       ...(purpose !== undefined && { purpose }),
       ...(amount !== undefined && { amount }),
       ...(note !== undefined && { note }),
-      ...(bill && { billUrl: bill.url }),
+      ...(bill && { billUrl: bill.key }),
     });
 
     return success(res, 200, "Expense request updated successfully", {

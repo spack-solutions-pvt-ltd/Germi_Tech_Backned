@@ -328,10 +328,10 @@ async function createLabourRequest(req, res, next) {
       fromLocation,
       toLocation,
       startPhotoUrl: startPhoto
-        ? startPhoto.url
+        ? startPhoto.key
         : null,
       endPhotoUrl: endPhoto
-        ? endPhoto.url
+        ? endPhoto.key
         : null,
       transportType,
       notes,
@@ -465,10 +465,10 @@ async function updateLabourRequest(req, res, next) {
       ...(transportType !== undefined && { transportType }),
       ...(notes !== undefined && { notes }),
       ...(startPhoto && {
-        startPhotoUrl: startPhoto.url,
+        startPhotoUrl: startPhoto.key,
       }),
       ...(endPhoto && {
-        endPhotoUrl: endPhoto.url,
+        endPhotoUrl: endPhoto.key,
       }),
     });
 

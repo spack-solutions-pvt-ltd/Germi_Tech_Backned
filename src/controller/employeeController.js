@@ -19,8 +19,7 @@ const { createInsurancePaymentIfDue } = require("../utils/insurancePayments");
 const { welcomeEmailTemplate } = require("../templates/welcomeEmail");
 const fs = require("fs");
 const path = require("path");
-const { signedUrl, keyFromStored, deleteStoredFile } = require("../utils/s3");
-const { LEGACY_UPLOAD_ROOT } = require("../middleWare/upload.middleware");
+const { getFileUrl, deleteFile, isLocalFile, LOCAL_UPLOAD_ROOT } = require("../utils/s3");
 
 const DOCUMENT_LABELS = {
   aadhaar_card: "Aadhaar Card",
@@ -40,24 +39,20 @@ function documentDisplayName(doc) {
   return doc.type === "other" ? doc.label : DOCUMENT_LABELS[doc.type];
 }
 
-// Employee documents are private: fileUrl stores the S3 key (or a legacy
-// /uploads path). viewUrl is what the UI opens — a signed S3 link valid for
-// DOCUMENT_LINK_SECONDS, or the legacy path for files uploaded before S3.
+// Employee documents are ID proofs: fileUrl stores the S3 key (or a local
+// /uploads path) and the UI opens viewUrl — a CloudFront signed link that
+// expires after DOCUMENT_LINK_SECONDS (other files get 29-day links).
 const DOCUMENT_LINK_SECONDS = 300;
 
-async function documentViewUrl(fileUrl) {
-  const key = keyFromStored(fileUrl);
-  return key ? signedUrl(key, { expiresIn: DOCUMENT_LINK_SECONDS }) : fileUrl || null;
-}
-
 /** EmployeeDocument (instance or plain object) -> response shape. */
-async function withDocumentLinks(doc) {
+function withDocumentLinks(doc) {
   const json = typeof doc.toJSON === "function" ? doc.toJSON() : doc;
+  const isLocal = isLocalFile(json.fileUrl);
   return {
     ...json,
     displayName: documentDisplayName(json),
-    viewUrl: await documentViewUrl(json.fileUrl),
-    viewUrlExpiresIn: keyFromStored(json.fileUrl) ? DOCUMENT_LINK_SECONDS : null,
+    viewUrl: getFileUrl(json.fileUrl, { expiresInSeconds: DOCUMENT_LINK_SECONDS }),
+    viewUrlExpiresIn: json.fileUrl && !isLocal ? DOCUMENT_LINK_SECONDS : null,
   };
 }
 
@@ -482,7 +477,7 @@ async function updateEmployeeDocument(req, res, next) {
     }
 
     await document.update(patch);
-    if (previousFile) await deleteStoredFile(previousFile);
+    if (previousFile) await deleteFile(previousFile);
 
     return success(res, 200, "Document updated successfully", {
       data: await withDocumentLinks(document),
@@ -526,21 +521,21 @@ const downloadEmployeeDocument = async (req, res, next) => {
     if (!document) return error(res, 404, "Employee document not found");
     if (!document.fileUrl) return error(res, 404, "Document file path is missing");
 
-    const downloadName = document.originalFileName || path.basename(document.fileUrl);
-
-    const key = keyFromStored(document.fileUrl);
-    if (key) {
-      return res.redirect(await signedUrl(key, { expiresIn: DOCUMENT_LINK_SECONDS, downloadName }));
+    // Local file: send it from disk (resolved from the file name only, so the
+    // path can't escape the uploads folder).
+    if (isLocalFile(document.fileUrl)) {
+      const filePath = path.join(LOCAL_UPLOAD_ROOT, "employee-documents", path.basename(document.fileUrl));
+      if (!fs.existsSync(filePath)) return error(res, 404, "File not found on server");
+      const downloadName = document.originalFileName || path.basename(document.fileUrl);
+      return res.download(filePath, downloadName, (err) => {
+        if (err && !res.headersSent) next(err);
+      });
     }
 
-    // Legacy: "/uploads/employee-documents/<file>" lives under src/uploads.
-    // Resolve from the file name only, so the path can't escape that folder.
-    const filePath = path.join(LEGACY_UPLOAD_ROOT, "employee-documents", path.basename(document.fileUrl));
-    if (!fs.existsSync(filePath)) return error(res, 404, "File not found on server");
-
-    return res.download(filePath, downloadName, (err) => {
-      if (err && !res.headersSent) next(err);
-    });
+    // S3: short-lived CloudFront signed link.
+    const url = getFileUrl(document.fileUrl, { expiresInSeconds: DOCUMENT_LINK_SECONDS });
+    if (!url) return error(res, 503, "File links are not available yet — CloudFront is not configured");
+    return res.redirect(url);
   } catch (err) {
     next(err);
   }
@@ -555,7 +550,7 @@ async function deleteEmployeeDocument(req, res, next) {
     if (!document) return error(res, 404, "Document not found");
     const storedFile = document.fileUrl;
     await document.destroy();
-    await deleteStoredFile(storedFile);
+    await deleteFile(storedFile);
     return success(res, 200, "Document deleted successfully");
   } catch (err) {
     next(err);

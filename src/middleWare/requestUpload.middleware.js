@@ -3,7 +3,7 @@ const { createS3Upload } = require("./s3Upload.middleware");
 const { S3_FOLDERS } = require("../utils/s3");
 
 // Request attachments, stored in S3 under one folder per request type and
-// served through CloudFront. Each file ends up with file.url (save this).
+// read back through CloudFront signed URLs. Each file ends up with file.key (save this).
 
 // Labour request: Start Photo + End Photo
 const labourRequestUpload = createS3Upload({

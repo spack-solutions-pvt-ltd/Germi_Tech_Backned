@@ -24,8 +24,9 @@ const loadingRequestRoutes = require("./loadingRequestsRoutes");
 const bagRequestRoutes = require("./bagRequestsRoutes");
 const bagTransferRoutes = require("./bagTransferRoutes");
 const paymentRoutes = require("./paymentRoutes");
-const { getAllStates } = require("../controller/stateController");
-const { getAllNames } = require("../controller/allotmentController");
+const dashboardRoutes = require("./dashboardRoutes");
+const { getAllStates } = require("../controller/stateController");  
+const { getAllNames, getAllotmentVillagesBySupervisor } = require("../controller/allotmentController");
 
 router.use(indexRoutes.auth, authRoutes);
 // Emp Management
@@ -53,8 +54,12 @@ router.use(indexRoutes.loadingRequests, authenticate, loadingRequestRoutes);
 router.use(indexRoutes.bagRequests, authenticate, bagRequestRoutes);
 router.use(indexRoutes.bagTransfers, authenticate, bagTransferRoutes);
 router.use(indexRoutes.payments, authenticate, paymentRoutes);
+router.use(indexRoutes.dashboard, authenticate, dashboardRoutes);
 // Independent routes
 router.get(indexRoutes.states, authenticate, getAllStates);
 router.get(indexRoutes.allFields, authenticate, getAllNames);
+// Allotment-villages of a supervisor: ?supervisorId= or /:supervisorId (default: logged-in user)
+router.get(indexRoutes.allotmentVillages, authenticate, getAllotmentVillagesBySupervisor);
+router.get(`${indexRoutes.allotmentVillages}/:supervisorId`, authenticate, getAllotmentVillagesBySupervisor);
 
 module.exports = router;

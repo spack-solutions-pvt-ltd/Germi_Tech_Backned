@@ -15,8 +15,7 @@ const {
 const { success, error } = require("../utils/response");
 const { generateId } = require("../utils/generateIds");
 const { respondedBySql, getMyNotificationCounts } = require("../utils/notificationCounts");
-const { LEGACY_UPLOAD_ROOT } = require("../middleWare/upload.middleware");
-const { keyFromStored, signedUrl, isCloudFrontConfigured } = require("../utils/s3");
+const { getFileUrl, isLocalFile, LOCAL_UPLOAD_ROOT } = require("../utils/s3");
 const SENDER_INCLUDE = {
   model: Employee,
   as: "sender",
@@ -32,9 +31,9 @@ function attachmentFields(files = {}) {
   const image = files.image?.[0];
   const document = files.document?.[0];
   return {
-    ...(image && { imageUrl: image.url }),
+    ...(image && { imageUrl: image.key }),
     ...(document && {
-      documentUrl: document.url,
+      documentUrl: document.key,
       documentName: document.originalname,
     }),
   };
@@ -232,26 +231,22 @@ const downloadNotificationDocument = async (req, res, next) => {
       attributes: ["id", "documentUrl", "documentName"],
     });
     if (!notification) return error(res, 404, "Notification not found");
-    const stored = notification.getDataValue("documentUrl"); // raw value: S3 key, URL or /uploads path
+    const stored = notification.getDataValue("documentUrl"); // S3 key or local /uploads path
     if (!stored) return error(res, 404, "This notification has no document");
-    const downloadName = notification.documentName || path.basename(stored);
 
-    // S3: CloudFront URL when configured (the object carries Content-Disposition:
-    // attachment + original name); until then a short-lived signed S3 link.
-    const key = keyFromStored(stored);
-    if (key) {
-      return res.redirect(
-        isCloudFrontConfigured() ? notification.documentUrl : await signedUrl(key, { downloadName }),
-      );
+    // Local file: send it from disk (resolved from the file name only, so the
+    // path can't escape the uploads folder).
+    if (isLocalFile(stored)) {
+      const filePath = path.join(LOCAL_UPLOAD_ROOT, "notifications", path.basename(stored));
+      if (!fs.existsSync(filePath)) return error(res, 404, "Document file is missing on the server");
+      return res.download(filePath, notification.documentName || path.basename(stored));
     }
-    if (/^https?:\/\//.test(stored)) return res.redirect(stored);
 
-    // Local file (uploaded before S3, or with the local fallback). Resolve from
-    // the stored file name only, so the path can't escape the uploads folder.
-    const filePath = path.join(LEGACY_UPLOAD_ROOT, "notifications", path.basename(stored));
-    if (!fs.existsSync(filePath)) return error(res, 404, "Document file is missing on the server");
-
-    return res.download(filePath, downloadName);
+    // S3: CloudFront signed link. The file was uploaded as an attachment with
+    // its original name, so the browser downloads it under that name.
+    const url = getFileUrl(stored);
+    if (!url) return error(res, 503, "File links are not available yet — CloudFront is not configured");
+    return res.redirect(url);
   } catch (err) {
     next(err);
   }

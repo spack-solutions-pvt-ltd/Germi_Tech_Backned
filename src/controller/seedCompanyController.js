@@ -8,8 +8,9 @@ const {
   Employee,
   State,
   Allotment,
+  AllotmentVillage,
 } = require("../models");
-const { startOfCurrentMonth, resolveSeason } = require("../utils/periods");
+const { startOfCurrentMonth, resolveSeason, allotmentScope } = require("../utils/periods");
 const {
   getPagination,
   buildPaginatedResponse,
@@ -95,8 +96,28 @@ const getSeedCompanyById = async (req, res, next) => {
       return error(res, 404, "Seed company not found");
     }
 
+    // Requirement = required acres of this company's allotments (open
+    // allotments by default; ?season=&year= for one season), plus how much of
+    // it has been allotted to villages so far.
+    const scope = allotmentScope(req.query);
+    const allotmentWhere = { ...scope.where, companyId: company.id };
+    const [requirementAcres, allottedAcres, allotmentsCount] = await Promise.all([
+      Allotment.sum("reqAcres", { where: allotmentWhere }),
+      AllotmentVillage.sum("allottedAcres", {
+        include: [{ model: Allotment, as: "allotment", attributes: [], where: allotmentWhere }],
+      }),
+      Allotment.count({ where: allotmentWhere }),
+    ]);
+
     return success(res, 200, "Seed company fetched successfully", {
-      data: company,
+      data: {
+        ...company.toJSON(),
+        requirementAcres: Number(requirementAcres) || 0,
+        allottedAcres: Number(allottedAcres) || 0,
+        balanceAcres: (Number(requirementAcres) || 0) - (Number(allottedAcres) || 0),
+        allotmentsCount,
+        scope: scope.label,
+      },
     });
   } catch (err) {
     next(err);

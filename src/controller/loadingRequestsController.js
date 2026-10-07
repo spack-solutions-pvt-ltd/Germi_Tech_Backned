@@ -88,8 +88,8 @@ const ENTRY_INCLUDE = {
 /* Helpers                                                             */
 /* ------------------------------------------------------------------ */
 
-// CloudFront URL set by the S3 upload middleware (S3: loading-requests/).
-const fileUrl = (file) => (file ? file.url : null);
+// Value to store for an uploaded file: S3 key (or local /uploads path).
+const fileUrl = (file) => (file ? file.key : null);
 
 /** { <prefix>Url, <prefix>Name } for an uploaded file, or {} when none was sent. */
 const photoFields = (prefix, file) =>
