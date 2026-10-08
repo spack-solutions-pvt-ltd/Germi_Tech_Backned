@@ -35,5 +35,4 @@ package-lock.json
 
 # Ignore upload folder
 uploads/
-# CloudFront signing key (never commit private keys)
-*.pem
+
