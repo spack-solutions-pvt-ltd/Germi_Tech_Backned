@@ -49,7 +49,7 @@ function fileFilter(allowedByField) {
  * @param {Array}    [opts.fields]         multer .fields() spec, e.g. [{ name: "start_photo", maxCount: 1 }]
  * @param {string}   [opts.single]         field name for a single-file upload
  * @param {object}   [opts.allowed]        { fieldName | "*": { extensions, label } } — default images + PDF
- * @param {number}   [opts.maxSizeMb]      per-file limit (default 5)
+ * @param {number}   [opts.maxSizeMb]      per-file limit (default 10 — phone photos are often 5–10 MB)
  * @param {string[]} [opts.downloadFields] fields the browser should download (original name) instead of open
  */
 function createS3Upload({
@@ -57,7 +57,7 @@ function createS3Upload({
   fields,
   single,
   allowed = { "*": IMAGE_OR_PDF },
-  maxSizeMb = 5,
+  maxSizeMb = 10,
   downloadFields = [],
 }) {
   const parser = multer({
@@ -70,7 +70,13 @@ function createS3Upload({
   return (req, res, next) => {
     parse(req, res, async (parseErr) => {
       if (parseErr) {
-        parseErr.statusCode = 400; // bad type / too large / unexpected field
+        if (parseErr.code === "LIMIT_FILE_SIZE") {
+          // Clear "too large" answer the UI can show as is.
+          parseErr.statusCode = 413;
+          parseErr.message = `${parseErr.field}: file is too large — the maximum is ${maxSizeMb} MB`;
+        } else {
+          parseErr.statusCode = 400; // bad type / unexpected field
+        }
         return next(parseErr);
       }
       try {

@@ -132,5 +132,4 @@ export const fileSrc = (url) =>
 
 The multipart field names did not change: `start_photo`, `end_photo`, `bill`, `dk_photo`,
 `image`, `document`. Images: JPEG/PNG/WEBP; bills & employee documents also PDF;
-notification documents PDF/Word/Excel/CSV/PowerPoint/text. Limits: 5 MB (requests), 10 MB
-(employee documents, notifications).
+notification documents PDF/Word/Excel/CSV/PowerPoint/text. Limits: 10 MB per file (requests, employee documents, notifications); the server's nginx must allow at least 25 MB per request (client_max_body_size).
