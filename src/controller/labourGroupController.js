@@ -42,7 +42,7 @@ async function getAllLaborGroups(req, res, next) {
         { laborGroupId: { [Op.like]: term } },
       ];
     }
-
+    
     // No page/limit: every match as { id, laborGroupId, name } for dropdowns.
     if (!hasPagination(req.query)) {
       const data = await LaborGroup.findAll({
