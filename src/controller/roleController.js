@@ -3,6 +3,7 @@ const { Op } = require("sequelize");
 const { Role, Permission, Employee } = require("../models");
 const {
   getPagination,
+  hasPagination,
   buildPaginatedResponse,
 } = require("../utils/pagination");
 const { buildPermissionMap } = require("../utils/permissionMap");
@@ -50,6 +51,17 @@ const getAllRoles = async (req, res, next) => {
     if (status) {
       where.status = status;
     }
+
+    // No page/limit: every matching role as { id, roleId, name } for dropdowns.
+    if (!hasPagination(req.query)) {
+      const data = await Role.findAll({
+        where,
+        attributes: ["id", "roleId", "name"],
+        order: [["name", "ASC"]],
+      });
+      return success(res, 200, "Roles fetched successfully", { data });
+    }
+
     const result = await Role.findAndCountAll({
       where,
       include: [

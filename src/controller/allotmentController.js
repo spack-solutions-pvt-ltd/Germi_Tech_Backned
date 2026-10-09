@@ -1,5 +1,5 @@
 "use strict";
-const { Op } = require("sequelize");
+const { Op, where } = require("sequelize");
 const {
   Allotment,
   AllotmentVillage,
@@ -17,6 +17,11 @@ const {
 } = require("../utils/pagination");
 const { success, error } = require("../utils/response");
 const { generateId } = require("../utils/generateIds");
+const {
+  OPEN_ALLOTMENT,
+  normalizeAllotmentStatus,
+} = require("../utils/allotmentStatus");
+const { toCropYear } = require("../utils/periods");
 
 const ALLOTMENT_INCLUDES = [
   {
@@ -122,7 +127,7 @@ const getAllotmentSummary = async (where, cropId) => {
 };
 
 /** Controller function for tp get all the procurements
-*/
+ */
 const getAllAllotments = async (req, res, next) => {
   try {
     const { search, companyId, cropId, season, year } = req.query;
@@ -131,7 +136,7 @@ const getAllAllotments = async (req, res, next) => {
     const where = {};
     if (companyId) where.companyId = companyId;
     if (season) where.season = season;
-    if (year) where.year = year;
+    if (year) where.year = toCropYear(year) || year; // "25-26" (2025 also accepted)
     if (search) where.allotmentId = { [Op.like]: `%${search}%` };
 
     const [result, summary] = await Promise.all([
@@ -188,7 +193,7 @@ const getAllotmentVillageTable = async (req, res, next) => {
     const allotmentWhere = {};
     if (companyId) allotmentWhere.companyId = companyId;
     if (season) allotmentWhere.season = season;
-    if (year) allotmentWhere.year = year;
+    if (year) allotmentWhere.year = toCropYear(year) || year;
     const hasAllotmentFilter = Object.keys(allotmentWhere).length > 0;
 
     const result = await AllotmentVillage.findAndCountAll({
@@ -303,6 +308,9 @@ const createAllotment = async (req, res, next) => {
     if (!["Kharif", "Rabi"].includes(season))
       return error(res, 400, "season must be Kharif or Rabi");
     if (!year) return error(res, 400, "year is required");
+    const cropYear = toCropYear(year); // "25-26"
+    if (!cropYear)
+      return error(res, 400, 'year must be a crop year like "25-26"');
 
     const company = await SeedCompany.findByPk(companyId);
     if (!company) return error(res, 404, "Seed company not found");
@@ -323,7 +331,7 @@ const createAllotment = async (req, res, next) => {
       reqAcres,
       reqQtyKgs,
       season,
-      year,
+      year: cropYear,
       status: "open",
     });
     const allotmentId = generateId("AL", allotment?.id);
@@ -368,6 +376,10 @@ const updateAllotment = async (req, res, next) => {
     if (status !== undefined && !["open", "closed"].includes(status)) {
       return error(res, 400, "status must be open or closed");
     }
+    const cropYear = year !== undefined ? toCropYear(year) : undefined; // "25-26"
+    if (year !== undefined && !cropYear) {
+      return error(res, 400, 'year must be a crop year like "25-26"');
+    }
 
     if (reqAcres !== undefined) {
       const currentAllotted = (allotment.villageAllotments || []).reduce(
@@ -387,7 +399,7 @@ const updateAllotment = async (req, res, next) => {
       ...(reqAcres !== undefined && { reqAcres }),
       ...(reqQtyKgs !== undefined && { reqQtyKgs }),
       ...(season !== undefined && { season }),
-      ...(year !== undefined && { year }),
+      ...(cropYear !== undefined && { year: cropYear }),
       ...(status !== undefined && { status }),
     });
 
@@ -534,11 +546,14 @@ async function updateVillageAllotment(req, res, next) {
       gpsPendingAcres,
       supervisorId,
       subOrganizerId,
-      status,
     } = req.body;
 
-    if (status !== undefined && !["open", "closed"].includes(status)) {
-      return error(res, 400, "status must be open or closed");
+    // "opened" / "open" / "closed". Closed = hidden from the supervisor
+    // everywhere (dropdowns, lists, new requests) — see utils/allotmentStatus.
+    let status;
+    if (req.body.status !== undefined) {
+      status = normalizeAllotmentStatus(req.body.status);
+      if (!status) return error(res, 400, "status must be opened or closed");
     }
 
     if (supervisorId !== undefined) {
@@ -593,10 +608,11 @@ async function updateVillageAllotment(req, res, next) {
  * A supervisor's village allotments as dropdown options: one line "AL-1001"
  * plus a sub-caption "Village -> Crop -> Variety". Shared by "my allotments"
  * and "allotments of supervisor X" so both return the same shape.
+ * Open allotments only — a closed one is never offered to a supervisor.
  */
-async function findAllotmentOptions(supervisorId, { status } = {}) {
+async function findAllotmentOptions(supervisorId) {
   const rows = await AllotmentVillage.findAll({
-    where: { supervisorId, ...(status && { status }) },
+    where: { supervisorId, ...OPEN_ALLOTMENT },
     include: [
       {
         model: Village,
@@ -634,9 +650,14 @@ async function findAllotmentOptions(supervisorId, { status } = {}) {
 const getMyAssignedAllotmentVillages = async (req, res, next) => {
   try {
     const options = await findAllotmentOptions(req.employee.id);
-    return success(res, 200, "Assigned allotment-villages fetched successfully", {
-      data: options,
-    });
+    return success(
+      res,
+      200,
+      "Assigned allotment-villages fetched successfully",
+      {
+        data: options,
+      },
+    );
   } catch (err) {
     next(err);
   }
@@ -649,27 +670,29 @@ const getMyAssignedAllotmentVillages = async (req, res, next) => {
  *   GET /allotment-villages?supervisorId=5      — that supervisor's
  *   GET /allotment-villages/:supervisorId       — same, as a path param
  *   GET /loading-requests/supervisors/:supervisorId/allotment-villages
- * Optional ?status=open|closed.
+ * Open allotments only.
  */
 const getAllotmentVillagesBySupervisor = async (req, res, next) => {
   try {
     // Whose allotments: /:supervisorId, ?supervisorId=, or the logged-in user.
-    const supervisorId = req.params.supervisorId || req.query.supervisorId || req.employee.id;
-    const { status } = req.query;
-    if (status && !["open", "closed"].includes(status)) {
-      return error(res, 400, "status must be open or closed");
-    }
+    const supervisorId =
+      req.params.supervisorId || req.query.supervisorId || req.employee.id;
 
     const supervisor = await Employee.findByPk(supervisorId, {
       attributes: ["id", "empId", "name", "level"],
     });
     if (!supervisor) return error(res, 404, "Supervisor not found");
 
-    const options = await findAllotmentOptions(supervisor.id, { status });
-    return success(res, 200, "Supervisor allotment-villages fetched successfully", {
-      supervisor,
-      data: options,
-    });
+    const options = await findAllotmentOptions(supervisor.id);
+    return success(
+      res,
+      200,
+      "Supervisor allotment-villages fetched successfully",
+      {
+        supervisor,
+        data: options,
+      },
+    );
   } catch (err) {
     next(err);
   }
@@ -682,7 +705,11 @@ const getAllotmentVillagesBySupervisor = async (req, res, next) => {
 const getSupervisorOptions = async (req, res, next) => {
   try {
     const data = await Employee.findAll({
-      where: { level: "L3", status: "Active", id: { [Op.ne]: req.employee.id } },
+      where: {
+        level: "L3",
+        status: "Active",
+        id: { [Op.ne]: req.employee.id },
+      },
       attributes: ["id", "empId", "name", "level"],
       order: [["name", "ASC"]],
     });
@@ -696,12 +723,15 @@ const getAllNames = async (req, res, next) => {
   try {
     const [villages, companies, crops] = await Promise.all([
       Village.findAll({
+        where: { status: "Active" },
         attributes: ["id", "name"],
       }),
       SeedCompany.findAll({
+        where: { status: "Active" },
         attributes: ["id", "name"],
       }),
       Crop.findAll({
+        where: { status: "Active" },
         attributes: ["id", "name"],
       }),
     ]);
@@ -729,10 +759,12 @@ const getAllotmentsSummary = async (req, res, next) => {
     const where = {};
     if (companyId) where.companyId = companyId;
     if (season) where.season = season;
-    if (year) where.year = year;
+    if (year) where.year = toCropYear(year) || year; // "25-26" (2025 also accepted)
 
     const data = await getAllotmentSummary(where, cropId);
-    return success(res, 200, "Allotment summary fetched successfully", { data });
+    return success(res, 200, "Allotment summary fetched successfully", {
+      data,
+    });
   } catch (err) {
     next(err);
   }

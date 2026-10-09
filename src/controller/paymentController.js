@@ -19,6 +19,7 @@ const {
   PAYMENT_STATUSES,
   typeFilterValues,
 } = require("../constants/payments");
+const { seasonFilter, paymentSeasonWhere } = require("../utils/periods");
 
 // Types offered in the filter ("expense" is only the legacy name of "supervisor").
 const SELECTABLE_TYPES = Object.keys(PAYMENT_TYPES).filter((t) => t !== "expense");
@@ -71,6 +72,8 @@ function assertDate(name, value) {
  *   code            payment code only, partial match (e.g. "PY-LB" or "0012")
  *   search          payment code, reference ID, recipient, source request code,
  *                   creator / processor names, and type labels ("labour", "hamali")
+ *   season / year   Kharif | Rabi and/or year (see seasonFilter): pending ones
+ *                   raised in it, processed ones paid in it
  */
 async function buildListWhere(query) {
   const {
@@ -82,7 +85,7 @@ async function buildListWhere(query) {
   assertDate("paymentDateFrom", paymentDateFrom);
   assertDate("paymentDateTo", paymentDateTo);
 
-  const and = [];
+  const and = [paymentSeasonWhere(seasonFilter(query))];
   if (status) and.push({ status });
   if (type) and.push({ type: parseTypes(type) });
   if (createdBy) and.push({ createdBy });
@@ -171,56 +174,49 @@ async function getPayments(req, res, next) {
 }
 
 /**
- * GET /payments/summary — KPI cards + tab counts.
- * All "due" figures are computed from currently pending payments.
+ * GET /payments/summary — KPI cards for both tabs.
+ * Pending tab (pending payments):
+ *   totalDue, labourDue, logisticsDue (transport), supervisorDue (supervisor + expense)
+ * Processed tab (processed payments):
+ *   totalPaid, paidLabour, paidLogistics (transport), paidSupervisor (supervisor + expense)
+ * pendingPayments / processedPayments — number of payments in each tab.
+ * ?season=Kharif|Rabi&year=25-26 — pending raised / processed paid in that season.
  */
 async function getPaymentSummary(req, res, next) {
   try {
+    const season = seasonFilter(req.query);
     const rows = await Payment.findAll({
-      attributes: [
-        "status",
-        "type",
-        [fn("COUNT", col("id")), "count"],
-        [fn("SUM", col("amount")), "amount"],
-      ],
+      where: paymentSeasonWhere(season),
+      attributes: ["status", "type", [fn("COUNT", col("id")), "count"], [fn("SUM", col("amount")), "amount"]],
       group: ["status", "type"],
       raw: true,
     });
 
-    const pendingByType = {};
-    const proccessedByType = {}
-    const totals = { pending: { count: 0, amount: 0 }, processed: { count: 0, amount: 0 } };
+    // { pending: { count, total, byType: { labour: 1200, ... } }, processed: { ... } }
+    const totals = { pending: { count: 0, total: 0, byType: {} }, processed: { count: 0, total: 0, byType: {} } };
     for (const row of rows) {
-      const type = row.type === "expense" ? "supervisor" : row.type;
-      const count = Number(row.count);
+      const bucket = totals[row.status];
       const amount = Number(row.amount) || 0;
-      totals[row.status].count += count;
-      totals[row.status].amount += amount;
-      if (row.status === "pending") {
-        pendingByType[type] = {
-          count: (pendingByType[type]?.count || 0) + count,
-          amount: (pendingByType[type]?.amount || 0) + amount,
-        };
-      }
-      if (row.status === "processed") {
-        proccessedByType[type] = {
-          count: (proccessedByType[type]?.count || 0) + count,
-          amount: (proccessedByType[type]?.amount || 0) + amount,
-        };
-      }
+      bucket.count += Number(row.count);
+      bucket.total += amount;
+      bucket.byType[row.type] = amount;
     }
+    const { pending, processed } = totals;
+    const supervisorAmount = (byType) => (byType.supervisor || 0) + (byType.expense || 0);
 
     return success(res, 200, "Payment summary fetched successfully", {
       data: {
-        pendingPayments: totals.pending.count,
-        dueAmount: totals.pending.amount,
-        dueInsuranceAmount: pendingByType.insurance?.amount || 0,
-        dueLabourAmount: pendingByType.labour?.amount || 0,
-        pendingByType,
-        processedPayments: totals.processed.count,
-        processedAmount: totals.processed.amount,
-        processedLabourAmount:proccessedByType.labour?.amount || 0,
-        processedInsuranceAmount:proccessedByType.insurance?.amount || 0
+        totalDue: pending.total,
+        labourDue: pending.byType.labour || 0,
+        logisticsDue: pending.byType.transport || 0,
+        supervisorDue: supervisorAmount(pending.byType),
+        totalPaid: processed.total,
+        paidLabour: processed.byType.labour || 0,
+        paidLogistics: processed.byType.transport || 0,
+        paidSupervisor: supervisorAmount(processed.byType),
+        pendingPayments: pending.count,
+        processedPayments: processed.count,
+        season: season ? season.label : "All time",
       },
     });
   } catch (err) {

@@ -19,6 +19,7 @@ const {
 const { generateId } = require("../utils/generateIds");
 const { success, error } = require("../utils/response");
 const { createSummaryHandlers } = require("../utils/statusSummary");
+const { myRequestsScope, withCreatorFlags } = require("../utils/requestOwnership");
 
 const INCLUDES = [
   {
@@ -63,7 +64,7 @@ const INCLUDES = [
   },
 ];
 
-const listVehicleRequests = async (where, req, res, next) => {
+const listVehicleRequests = async (where, req, res, next, { viewerId } = {}) => {
   try {
     const { page, limit, offset } = getPagination(req.query);
     const { status, village, search } = req.query;
@@ -89,12 +90,9 @@ const listVehicleRequests = async (where, req, res, next) => {
       offset,
     });
 
-    return success(
-      res,
-      200,
-      "Vehicle requests fetched successfully",
-      buildPaginatedResponse(result, page, limit),
-    );
+    const response = buildPaginatedResponse(result, page, limit);
+    if (viewerId) response.data = withCreatorFlags(result.rows, viewerId); // createdByMe / createdOnBehalf / canEdit
+    return success(res, 200, "Vehicle requests fetched successfully", response);
   } catch (err) {
     next(err);
   }
@@ -103,7 +101,8 @@ const listVehicleRequests = async (where, req, res, next) => {
 /** GET /api/vehicle-requests/my-requests — the L3 "Requests" tab: own requests only */
 const getMyVehicleRequests = async (req, res, next) => {
   if (!req.employee) return error(res, 401, "Authentication required");
-  return listVehicleRequests({ requestedBy: req.employee.id }, req, res, next);
+  // Raised for me + created by me for a supervisor; rows carry createdByMe / createdOnBehalf / canEdit.
+  return listVehicleRequests(myRequestsScope(req.employee.id), req, res, next, { viewerId: req.employee.id });
 };
 
 /** GET /api/vehicle-requests — Verifications (L2, view-only) / Approvals (L1): every supervisor's requests */
@@ -226,6 +225,9 @@ async function createVehicleRequest(req, res, next) {
         403,
         `Employee ${requestedBy} is not the assigned supervisor for this allotment-village`,
       );
+    }
+    if (av.status === "closed") {
+      return error(res, 400, "This allotment is closed — choose an open allotment");
     }
 
     const warehouse = await Warehouse.findByPk(toWarehouseId);

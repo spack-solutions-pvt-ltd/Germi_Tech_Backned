@@ -1,4 +1,5 @@
 "use strict";
+const { Op } = require("sequelize");
 const { Employee } = require("../models");
 
 // Ownership rules shared by request modules (loading, bags, send bags).
@@ -45,7 +46,45 @@ async function resolveRequestOwner(onBehalfOf, employee) {
   return supervisor.id;
 }
 
+/**
+ * where for a "my requests" list: requests raised FOR me (ownerField) plus
+ * requests I created on someone else's behalf (createdBy). Wrapped in Op.and
+ * so callers can still add their own Op.or (e.g. search).
+ */
+function myRequestsScope(employeeId, ownerField = "requestedBy") {
+  return { [Op.and]: [{ [Op.or]: [{ [ownerField]: employeeId }, { createdBy: employeeId }] }] };
+}
+
+/**
+ * Flags for one row of a "my requests" list, so the UI knows whether the
+ * viewer may edit it:
+ *   createdByMe     — the viewer created it (old rows without createdBy count
+ *                     as created by their owner)
+ *   createdOnBehalf — someone other than the supervisor created it for them
+ *                     (e.g. L1 from the Requests page)
+ *   canEdit         — createdByMe and still in an editable status
+ */
+function creatorFlags(request, viewerId, { ownerField = "requestedBy", editableStatuses = ["pending"] } = {}) {
+  const creatorId = request.createdBy ?? request[ownerField];
+  const createdByMe = creatorId === viewerId;
+  return {
+    createdByMe,
+    createdOnBehalf: creatorId !== request[ownerField],
+    canEdit: createdByMe && editableStatuses.includes(request.status),
+  };
+}
+
+/** Model rows -> JSON with creatorFlags added. */
+const withCreatorFlags = (rows, viewerId, options) =>
+  rows.map((row) => {
+    const json = typeof row.toJSON === "function" ? row.toJSON() : row;
+    return { ...json, ...creatorFlags(json, viewerId, options) };
+  });
+
 module.exports = {
+  myRequestsScope,
+  creatorFlags,
+  withCreatorFlags,
   isRequestOwner,
   assertNotRequestOwner,
   assertRequestOwner,

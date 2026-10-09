@@ -31,8 +31,10 @@ const {
   assertRequestOwner,
   assertNotRequestOwner,
   resolveRequestOwner,
+  creatorFlags,
 } = require("../utils/requestOwnership");
 const { attachPaymentContext } = require("../utils/paymentContext");
+const { assertAllotmentOpen } = require("../utils/allotmentStatus");
 const {
   calculateLoadingAmounts,
   requiredPaymentTypes,
@@ -138,6 +140,8 @@ async function buildEntries(rawEntries, requestedBy, dkFiles = [], existingEntri
     if (av.supervisorId !== supervisorId) {
       throw httpError(400, `${row}: the allotment is not assigned to the selected supervisor`);
     }
+    // Closed allotments can't be picked — unless this request (on edit) already has it.
+    assertAllotmentOpen(av, row, existingEntries.map((e) => e.allotmentVillageId));
 
     const fileIndex = explicitIndexes ? entry.dkPhotoIndex : index;
     const file = fileIndex !== undefined && fileIndex !== null ? dkFiles[Number(fileIndex)] : undefined;
@@ -198,12 +202,13 @@ async function applyAmounts(request, amounts, transaction) {
 // their "my requests" too, but view only — they can't edit, cancel, verify,
 // change amounts or create payments.
 
-/** where: requests I raised, or where at least one loading row is mine. */
+/** where: requests raised for me, created by me for a supervisor, or where at least one loading row is mine. */
 function myRequestsWhere(employeeId) {
   const id = sequelize.escape(employeeId);
   return {
     [Op.or]: [
       { requestedBy: employeeId },
+      { createdBy: employeeId },
       {
         id: {
           [Op.in]: sequelize.literal(
@@ -253,6 +258,8 @@ function decorate(request, { forSupervisor = false, viewerId = null } = {}) {
     ...json,
     status: forSupervisor ? toSupervisorStatus(json.status) : json.status,
     ...(viewerId && { viewOnly: isViewOnlyFor(json, viewerId) }),
+    // createdByMe / createdOnBehalf / canEdit — only the creator edits, while pending
+    ...(viewerId && creatorFlags(json, viewerId)),
     amounts,
     payments: {
       transport: paymentState("transport", amounts.transportAmount),

@@ -7,6 +7,7 @@ const {
 const { generateId } = require("../utils/generateIds");
 const { success, error } = require("../utils/response");
 const { createSummaryHandlers } = require("../utils/statusSummary");
+const { myRequestsScope, withCreatorFlags } = require("../utils/requestOwnership");
 const { createPaymentIfNeeded } = require("../utils/createPayment");
 const { Op } = require("sequelize");
 
@@ -22,7 +23,7 @@ const INCLUDES = [
 ];
 
 /** Shared list logic — `where` is built by the caller so "mine" vs "everyone's" can differ. */
-async function listExpenseRequests(where, req, res, next) {
+async function listExpenseRequests(where, req, res, next, { viewerId } = {}) {
   try {
     const { page, limit, offset } = getPagination(req.query);
     const { status, search } = req.query;
@@ -47,20 +48,21 @@ async function listExpenseRequests(where, req, res, next) {
       offset,
     });
 
-    return success(
-      res,
-      200,
-      "Expense requests fetched successfully",
-      buildPaginatedResponse(result, page, limit),
-    );
+    const response = buildPaginatedResponse(result, page, limit);
+    if (viewerId) response.data = withCreatorFlags(result.rows, viewerId); // createdByMe / createdOnBehalf / canEdit
+    return success(res, 200, "Expense requests fetched successfully", response);
   } catch (err) {
     next(err);
   }
 }
 
-/** GET /api/expense-requests/my-requests — the L3 "Requests" tab: own requests only */
+/**
+ * GET /api/expense-requests/my-requests — the "Requests" tab: requests raised
+ * for me + requests I created for a supervisor. Each row has createdByMe /
+ * createdOnBehalf / canEdit (only the creator edits, while pending).
+ */
 async function getMyExpenseRequests(req, res, next) {
-  return listExpenseRequests({ requestedBy: req.employee.id }, req, res, next);
+  return listExpenseRequests(myRequestsScope(req.employee.id), req, res, next, { viewerId: req.employee.id });
 }
 
 /** GET /api/expense-requests — Verifications/Approvals: every supervisor's requests */

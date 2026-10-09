@@ -34,6 +34,7 @@ const {
   assertRequestOwner,
   resolveRequestOwner,
 } = require("../utils/requestOwnership");
+const { OPEN_ALLOTMENT, assertAllotmentOpen } = require("../utils/allotmentStatus");
 
 const GERMITECH_COMPANY_NAME = "Germi Tech Company";
 
@@ -259,7 +260,11 @@ async function getMyAllotmentsWithBags(req, res, next) {
   try {
     const me = Number(req.query.supervisorId) || req.employee.id;
     const [rows, balances, committed] = await Promise.all([
-      AllotmentVillage.findAll({ where: { supervisorId: me }, include: avDetailInclude(), order: [["createdAt", "DESC"]] }),
+      AllotmentVillage.findAll({
+        where: { supervisorId: me, ...OPEN_ALLOTMENT },
+        include: avDetailInclude(),
+        order: [["createdAt", "DESC"]],
+      }),
       BagsBalance.findAll({ where: { supervisorId: me } }),
       BagsTransfer.findAll({
         where: { senderId: me, status: OPEN_STATUSES },
@@ -339,7 +344,7 @@ async function getSupervisors(req, res, next) {
 async function getSupervisorAllotments(req, res, next) {
   try {
     const rows = await AllotmentVillage.findAll({
-      where: { supervisorId: req.params.supervisorId },
+      where: { supervisorId: req.params.supervisorId, ...OPEN_ALLOTMENT },
       include: avDetailInclude(),
       order: [["createdAt", "DESC"]],
     });
@@ -358,8 +363,9 @@ async function getSupervisorAllotments(req, res, next) {
  * input: { fromAllotmentVillageId, bags, note?, sendTo: "company" | "supervisor",
  *          company:    toCompanyType: "germitech" | "seed_company", toCompanyId (seed_company only)
  *          supervisor: toSupervisorId, toAllotmentVillageId }
+ * keepIds: allotments a transfer being edited already uses (allowed even if closed since).
  */
-async function buildTransferFields(input, senderId) {
+async function buildTransferFields(input, senderId, keepIds = []) {
   const { fromAllotmentVillageId, sendTo, toCompanyType, toCompanyId, toSupervisorId, toAllotmentVillageId } = input;
 
   const bags = toPositiveInt(input.bags);
@@ -371,6 +377,7 @@ async function buildTransferFields(input, senderId) {
   if (fromAv.supervisorId !== senderId) {
     throw httpError(403, "The selected allotment is not assigned to the sending supervisor");
   }
+  assertAllotmentOpen(fromAv, "From allotment", keepIds);
 
   // Every destination column is reset, so switching company <-> supervisor on edit leaves nothing stale.
   const fields = {
@@ -408,6 +415,7 @@ async function buildTransferFields(input, senderId) {
     if (!toAv || toAv.supervisorId !== receiver.id) {
       throw httpError(400, "Selected allotment does not belong to the selected supervisor");
     }
+    assertAllotmentOpen(toAv, "To allotment", keepIds);
     fields.type = "shared";
     fields.toSupervisorId = receiver.id;
     fields.toAllotmentVillageId = toAv.id;
@@ -485,7 +493,10 @@ async function updateBagsTransfer(req, res, next) {
       if (transfer.status !== "pending") throw httpError(409, "Transfers can only be edited while Pending");
 
       const changes = Object.fromEntries(Object.entries(req.body || {}).filter(([, v]) => v !== undefined));
-      const fields = await buildTransferFields({ ...transferAsInput(transfer), ...changes }, transfer.senderId);
+      const fields = await buildTransferFields({ ...transferAsInput(transfer), ...changes }, transfer.senderId, [
+        transfer.fromAllotmentVillageId,
+        transfer.toAllotmentVillageId,
+      ]);
       await assertSendable(transfer.senderId, fields.fromAllotmentVillageId, fields.bags, t, transfer.id);
 
       await transfer.update(fields, { transaction: t });

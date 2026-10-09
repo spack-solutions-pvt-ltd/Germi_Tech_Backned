@@ -4,6 +4,8 @@ const { SubOrganizer, Village, Employee, AllotmentVillage, Allotment } = require
 const { resolveSeason } = require("../utils/periods");
 const {
   getPagination,
+  hasPagination,
+  statusFilter,
   buildPaginatedResponse,
 } = require("../utils/pagination");
 const { success, error } = require("../utils/response");
@@ -15,7 +17,7 @@ const getAllSubOrganizers = async (req, res, next) => {
     const { villageId, search } = req.query;
     const { page, limit, offset } = getPagination(req.query);
 
-    const where = {};
+    const where = statusFilter(req.query.status); // ?status=Active|Inactive
     if (villageId) where.villageId = villageId;
     if (search) {
       const term = `%${search.trim()}%`;
@@ -23,6 +25,16 @@ const getAllSubOrganizers = async (req, res, next) => {
         { name: { [Op.like]: term } },
         { subOrganizerId: { [Op.like]: term } },
       ];
+    }
+
+    // No page/limit: every match as { id, subOrganizerId, name } for dropdowns.
+    if (!hasPagination(req.query)) {
+      const data = await SubOrganizer.findAll({
+        where,
+        attributes: ["id", "subOrganizerId", "name"],
+        order: [["name", "ASC"]],
+      });
+      return success(res, 200, "Sub organizers fetched successfully", { data });
     }
 
     const result = await SubOrganizer.findAndCountAll({
@@ -64,10 +76,26 @@ const getSubOrganizersByVillageId = async (req, res, next) => {
     const village = await Village.findByPk(villageId);
     if (!village) return error(res, 404, "Village not found");
 
+    // ?status=Active|Inactive
+    const { status } = req.query;
+    if (status && !["Active", "Inactive"].includes(status)) {
+      return error(res, 400, "status must be Active or Inactive");
+    }
+    const where = { villageId, ...(status && { status }) };
+
+    // No page/limit: every match as { id, name } for dropdowns.
+    if (!hasPagination(req.query)) {
+      const data = await SubOrganizer.findAll({
+        where,
+        attributes: ["id", "name"],
+      });
+      return success(res, 200, "Sub organizers fetched successfully", { data });
+    }
+
     const { page, limit, offset } = getPagination(req.query);
 
     const result = await SubOrganizer.findAndCountAll({
-      where: { villageId },
+      where,
       include: [
         { model: Employee, as: "creator", attributes: ["id", "name", "empId"] },
       ],
@@ -218,7 +246,7 @@ const getSubOrganizerSummary = async (req, res, next) => {
             model: Allotment,
             as: "allotment",
             attributes: [],
-            where: { season: season.season, year: season.year },
+            where: { season: season.season, year: season.cropYear },
           },
         ],
       }),

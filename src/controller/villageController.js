@@ -1,9 +1,17 @@
 "use strict";
 const { Op } = require("sequelize");
-const { Village, SubOrganizer, Employee, AllotmentVillage, Allotment } = require("../models");
+const {
+  Village,
+  SubOrganizer,
+  Employee,
+  AllotmentVillage,
+  Allotment,
+} = require("../models");
 const { startOfCurrentMonth, allotmentScope } = require("../utils/periods");
 const {
   getPagination,
+  hasPagination,
+  statusFilter,
   buildPaginatedResponse,
 } = require("../utils/pagination");
 const { success, error } = require("../utils/response");
@@ -12,16 +20,26 @@ const { generateId } = require("../utils/generateIds");
 /** GET /api/villages?search=kondapur&page=1&limit=20 */
 const getAllVillages = async (req, res, next) => {
   try {
-    const { search } = req.query;
+    const { search, status } = req.query;
     const { page, limit, offset } = getPagination(req.query);
 
-    const where = {};
+    const where = statusFilter(status); // ?status=Active|Inactive
     if (search) {
       const term = `%${search.trim()}%`;
       where[Op.or] = [
         { name: { [Op.like]: term } },
         { villageId: { [Op.like]: term } },
       ];
+    }
+
+    // No page/limit: every match as { id, villageId, name } for dropdowns.
+    if (!hasPagination(req.query)) {
+      const data = await Village.findAll({
+        where,
+        attributes: ["id", "villageId", "name"],
+        order: [["name", "ASC"]],
+      });
+      return success(res, 200, "Villages fetched successfully", { data });
     }
 
     const result = await Village.findAndCountAll({
@@ -97,8 +115,17 @@ const getVillageById = async (req, res, next) => {
       where: { villageId: village.id },
       attributes: ["id", "supervisorId", "allottedAcres"],
       include: [
-        { model: Allotment, as: "allotment", attributes: [], where: scope.where },
-        { model: Employee, as: "supervisor", attributes: ["id", "empId", "name", "level", "number"] },
+        {
+          model: Allotment,
+          as: "allotment",
+          attributes: [],
+          where: scope.where,
+        },
+        {
+          model: Employee,
+          as: "supervisor",
+          attributes: ["id", "empId", "name", "level", "number"],
+        },
       ],
     });
 
@@ -118,7 +145,10 @@ const getVillageById = async (req, res, next) => {
     return success(res, 200, "Village fetched successfully", {
       data: {
         ...village.toJSON(),
-        acresMapped: allotmentVillages.reduce((sum, av) => sum + (Number(av.allottedAcres) || 0), 0),
+        acresMapped: allotmentVillages.reduce(
+          (sum, av) => sum + (Number(av.allottedAcres) || 0),
+          0,
+        ),
         assignedSupervisors: [...supervisors.values()],
         scope: scope.label,
       },
@@ -205,12 +235,15 @@ const updatevillageStatusById = async (req, res, next) => {
  */
 const getVillageSummary = async (req, res, next) => {
   try {
-    const [totalVillages, inactiveVillages, newThisMonth, acresMapped] = await Promise.all([
-      Village.count(),
-      Village.count({ where: { status: "Inactive" } }),
-      Village.count({ where: { createdAt: { [Op.gte]: startOfCurrentMonth() } } }),
-      SubOrganizer.sum("acres"),
-    ]);
+    const [totalVillages, inactiveVillages, newThisMonth, acresMapped] =
+      await Promise.all([
+        Village.count(),
+        Village.count({ where: { status: "Inactive" } }),
+        Village.count({
+          where: { createdAt: { [Op.gte]: startOfCurrentMonth() } },
+        }),
+        SubOrganizer.sum("acres"),
+      ]);
 
     return success(res, 200, "Village summary fetched successfully", {
       data: {

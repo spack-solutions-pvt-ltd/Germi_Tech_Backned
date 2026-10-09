@@ -1,4 +1,5 @@
 "use strict";
+const { httpError } = require("./response");
 
 const DEFAULT_PAGE = 1;
 const DEFAULT_LIMIT = 20;
@@ -29,6 +30,18 @@ function hasPagination(query) {
   return query.page !== undefined || query.limit !== undefined;
 }
 
+const STATUSES = ["Active", "Inactive"];
+
+/**
+ * ?status=Active|Inactive -> { status } to spread into a where ({} when not
+ * sent). Throws 400 for any other value.
+ */
+function statusFilter(status) {
+  if (status === undefined || status === "") return {};
+  if (!STATUSES.includes(status)) throw httpError(400, "status must be Active or Inactive");
+  return { status };
+}
+
 /**
  * Wraps a Sequelize findAndCountAll() result ({ rows, count }) into a
  * consistent { data, meta } response shape.
@@ -45,4 +58,4 @@ function buildPaginatedResponse({ rows, count }, page, limit) {
   };
 }
 
-module.exports = { getPagination, hasPagination, buildPaginatedResponse };
+module.exports = { getPagination, hasPagination, statusFilter, buildPaginatedResponse };

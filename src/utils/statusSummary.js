@@ -1,6 +1,7 @@
 "use strict";
 const { fn, col } = require("sequelize");
 const { success } = require("./response");
+const { myRequestsScope } = require("./requestOwnership");
 
 // KPI cards for request modules: counts per status + total.
 
@@ -26,7 +27,7 @@ async function summarizeByStatus(Model, statuses, where = {}) {
 
 /**
  * Builds the two summary endpoints a request module needs:
- *   getMySummary — Requests page: the logged-in user's own requests
+ *   getMySummary — Requests page: raised for the logged-in user + created by them
  *   getSummary   — Verifications / Approvals pages: everyone's (optional ?requestedBy=)
  */
 function createSummaryHandlers(Model, statuses, { ownerField = "requestedBy", label = "Request" } = {}) {
@@ -38,7 +39,7 @@ function createSummaryHandlers(Model, statuses, { ownerField = "requestedBy", la
   return {
     getMySummary: async (req, res, next) => {
       try {
-        return await respond(res, { [ownerField]: req.employee.id });
+        return await respond(res, myRequestsScope(req.employee.id, ownerField)); // raised for me + created by me
       } catch (err) {
         next(err);
       }

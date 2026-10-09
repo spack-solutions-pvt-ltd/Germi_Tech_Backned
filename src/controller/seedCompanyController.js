@@ -13,6 +13,8 @@ const {
 const { startOfCurrentMonth, resolveSeason, allotmentScope } = require("../utils/periods");
 const {
   getPagination,
+  hasPagination,
+  statusFilter,
   buildPaginatedResponse,
 } = require("../utils/pagination");
 const { success, error } = require("../utils/response");
@@ -24,13 +26,23 @@ const getAllSeedCompanies = async (req, res, next) => {
     const { search } = req.query;
     const { page, limit, offset } = getPagination(req.query);
 
-    const where = {};
+    const where = statusFilter(req.query.status); // ?status=Active|Inactive
     if (search) {
       const term = `%${search.trim()}%`;
       where[Op.or] = [
         { name: { [Op.like]: term } },
         { companyId: { [Op.like]: term } },
       ];
+    }
+
+    // No page/limit: every match as { id, companyId, name } for dropdowns.
+    if (!hasPagination(req.query)) {
+      const data = await SeedCompany.findAll({
+        where,
+        attributes: ["id", "companyId", "name"],
+        order: [["name", "ASC"]],
+      });
+      return success(res, 200, "Seed companies fetched successfully", { data });
     }
 
     const result = await SeedCompany.findAndCountAll({
@@ -220,7 +232,7 @@ const getSeedCompanySummary = async (req, res, next) => {
       SeedCompany.count(),
       SeedCompany.count({ where: { status: "Inactive" } }),
       SeedCompany.count({ where: { createdAt: { [Op.gte]: startOfCurrentMonth() } } }),
-      Allotment.sum("reqAcres", { where: { season: season.season, year: season.year } }),
+      Allotment.sum("reqAcres", { where: { season: season.season, year: season.cropYear } }),
     ]);
 
     return success(res, 200, "Seed company summary fetched successfully", {

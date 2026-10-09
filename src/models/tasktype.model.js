@@ -13,6 +13,11 @@ module.exports = (sequelize, DataTypes) => {
       taskTypeId: DataTypes.STRING,
       name: { type: DataTypes.STRING, allowNull: false, unique: true },
       description: DataTypes.STRING,
+      status: {
+        type: DataTypes.ENUM("Active", "Inactive"),
+        allowNull: false,
+        defaultValue: "Active",
+      },
     },
     {
       sequelize,

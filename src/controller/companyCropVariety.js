@@ -3,6 +3,8 @@ const { Op } = require("sequelize");
 const { CompanyCrop, SeedCompany, Crop } = require("../models");
 const {
   getPagination,
+  hasPagination,
+  statusFilter,
   buildPaginatedResponse,
 } = require("../utils/pagination");
 const { success, error } = require("../utils/response");
@@ -17,10 +19,10 @@ const { generateId } = require("../utils/generateIds");
 async function getAllCropVarieties(req, res, next) {
   try {
     const { companyId } = req.params;
-    const { search } = req.query;
+    const { search, status } = req.query;
     const { page, limit, offset } = getPagination(req.query);
 
-    const where = {};
+    const where = statusFilter(status); // ?status=Active|Inactive
     if (companyId) where.companyId = companyId;
     if (search) {
       const term = `%${search.trim()}%`;
@@ -29,6 +31,17 @@ async function getAllCropVarieties(req, res, next) {
         { companyCropId: { [Op.like]: term } },
         { "$crop.name$": { [Op.like]: term } },
       ];
+    }
+
+    // No page/limit: every match as { id, companyCropId, varietyName, crop } for dropdowns.
+    if (!hasPagination(req.query)) {
+      const data = await CompanyCrop.findAll({
+        where,
+        attributes: ["id", "companyCropId", "varietyName"],
+        include: [{ model: Crop, as: "crop", attributes: ["id", "cropId", "name"] }],
+        order: [["varietyName", "ASC"]],
+      });
+      return success(res, 200, "Crop varieties fetched successfully", { data });
     }
 
     const result = await CompanyCrop.findAndCountAll({

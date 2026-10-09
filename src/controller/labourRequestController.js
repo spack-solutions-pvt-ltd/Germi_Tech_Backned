@@ -8,7 +8,6 @@ const {
   Crop,
   Village,
   LaborGroup,
-  LaborGroupCropRate,
   Employee,
 } = require("../models");
 const {
@@ -18,7 +17,9 @@ const {
 const { generateId } = require("../utils/generateIds");
 const { success, error } = require("../utils/response");
 const { createSummaryHandlers } = require("../utils/statusSummary");
+const { myRequestsScope, withCreatorFlags } = require("../utils/requestOwnership");
 const { createPaymentIfNeeded } = require("../utils/createPayment");
+const { calculateLabourCost } = require("../utils/labourCost");
 
 const ENTRY_INCLUDE = {
   model: LabourRequestCropEntry,
@@ -91,66 +92,6 @@ const LIST_ENTRY_INCLUDE = {
 };
 
 /**
- * Crop-wise cost for a request loaded with ENTRY_INCLUDE. Each entry's crop
- * comes from its allotment (Allotment -> CompanyCrop -> Crop) and is priced
- * with the assigned labor group's LaborGroupCropRate for that crop:
- *   totalAmount = Σ (labourCount * pricePerPerson) + transportCost
- * Entries whose crop has no rate (or "Others" labor group) get pricePerPerson null
- * and are listed in missingRateCrops.
- */
-async function calculateLabourCost(request) {
-  const entries = request.cropEntries || [];
-  const cropIds = [
-    ...new Set(
-      entries
-        .map((e) => e.allotmentVillage?.allotment?.companyCrop?.cropId)
-        .filter(Boolean),
-    ),
-  ];
-
-  const rates =
-    request.laborGroupId && cropIds.length
-      ? await LaborGroupCropRate.findAll({
-          where: { laborGroupId: request.laborGroupId, cropId: cropIds },
-        })
-      : [];
-  const priceByCrop = new Map(
-    rates.map((r) => [r.cropId, Number(r.pricePerPerson)]),
-  );
-
-  const cropCosts = entries.map((e) => {
-    const crop = e.allotmentVillage?.allotment?.companyCrop?.crop;
-    const cropId =
-      crop?.id ?? e.allotmentVillage?.allotment?.companyCrop?.cropId;
-    const pricePerPerson = priceByCrop.has(cropId)
-      ? priceByCrop.get(cropId)
-      : null;
-    const labourCount = Number(e.labourCount) || 0;
-    return {
-      cropEntryId: e.id,
-      cropId,
-      cropName: crop?.name || null,
-      labourCount,
-      pricePerPerson,
-      subtotal: pricePerPerson !== null ? labourCount * pricePerPerson : 0,
-    };
-  });
-
-  const labourCostSubtotal = cropCosts.reduce((a, c) => a + c.subtotal, 0);
-  const transportCost = Number(request.transportCost) || 0;
-
-  return {
-    cropCosts,
-    labourCostSubtotal,
-    transportCost,
-    totalAmount: labourCostSubtotal + transportCost,
-    missingRateCrops: cropCosts
-      .filter((c) => c.pricePerPerson === null)
-      .map((c) => c.cropName),
-  };
-}
-
-/**
  * Reads an optional transportCost from a request body.
  * Returns undefined when not provided, null when invalid, else the number (≥ 0).
  */
@@ -161,7 +102,7 @@ function parseTransportCost(value) {
 }
 
 /** Shared list logic — `where` is built by the caller so "mine" vs "everyone's" can differ. */
-async function listLabourRequests(where, req, res, next) {
+async function listLabourRequests(where, req, res, next, { viewerId } = {}) {
   try {
     const { page, limit, offset } = getPagination(req.query);
     const { status } = req.query;
@@ -175,20 +116,21 @@ async function listLabourRequests(where, req, res, next) {
       offset,
     });
 
-    return success(
-      res,
-      200,
-      "Labour requests fetched successfully",
-      buildPaginatedResponse(result, page, limit),
-    );
+    const response = buildPaginatedResponse(result, page, limit);
+    if (viewerId) response.data = withCreatorFlags(result.rows, viewerId); // createdByMe / createdOnBehalf / canEdit
+    return success(res, 200, "Labour requests fetched successfully", response);
   } catch (err) {
     next(err);
   }
 }
 
-/** GET /api/labour-requests/my-requests — the L3 "Requests" tab: own requests only */
+/**
+ * GET /api/labour-requests/my-requests — the "Requests" tab: requests raised
+ * for me + requests I created for a supervisor. Each row has createdByMe /
+ * createdOnBehalf / canEdit (only the creator edits, while pending).
+ */
 async function getMyLabourRequests(req, res, next) {
-  return listLabourRequests({ requestedBy: req.employee.id }, req, res, next);
+  return listLabourRequests(myRequestsScope(req.employee.id), req, res, next, { viewerId: req.employee.id });
 }
 
 /** GET /api/labour-requests — Verifications/Approvals: every supervisor's requests */
@@ -315,6 +257,13 @@ async function createLabourRequest(req, res, next) {
           `Employee ${requestedBy} is not the assigned supervisor for allotmentVillageId ${entry.allotmentVillageId}`,
         );
       }
+      if (av.status === "closed") {
+        return error(
+          res,
+          400,
+          `allotmentVillageId ${entry.allotmentVillageId}: this allotment is closed — choose an open allotment`,
+        );
+      }
     }
 
     const startPhoto = req.files?.start_photo?.[0];
@@ -411,6 +360,14 @@ async function updateLabourRequest(req, res, next) {
         return error(res, 400, "cropEntries must be valid JSON");
       }
 
+      // Allotments this request already has stay allowed even if closed since.
+      const keepIds = (
+        await LabourRequestCropEntry.findAll({
+          where: { labourRequestId: id },
+          attributes: ["allotmentVillageId"],
+        })
+      ).map((e) => e.allotmentVillageId);
+
       for (const entry of cropEntries) {
         if (!entry.allotmentVillageId)
           return error(
@@ -433,6 +390,13 @@ async function updateLabourRequest(req, res, next) {
             res,
             403,
             `Not the assigned supervisor for allotmentVillageId ${entry.allotmentVillageId}`,
+          );
+        }
+        if (av.status === "closed" && !keepIds.includes(av.id)) {
+          return error(
+            res,
+            400,
+            `allotmentVillageId ${entry.allotmentVillageId}: this allotment is closed — choose an open allotment`,
           );
         }
       }

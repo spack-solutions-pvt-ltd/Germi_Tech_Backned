@@ -11,6 +11,8 @@ const {
   updateVehicle,
   getVehicleById,
   updateLogisticsPartnerStatus,
+  getLogisticsPartnerPayments,
+  getLogisticsPartnerPaymentById,
 } = require("../controller/logisticPartnerController");
 // const { authenticate, requirePermission } = require("../middlewares/auth.middleware");
 
@@ -19,6 +21,8 @@ const router = Router();
 router.get("/summary", getLogisticsSummary); // KPI cards — before /:id
 router.get("/", getAllLogisticsPartners);
 router.get("/:id", getLogisticsPartnerById);
+router.get("/:id/payments", getLogisticsPartnerPayments); // Transport payments history + totals
+router.get("/:id/payments/:paymentId", getLogisticsPartnerPaymentById); // payment drawer
 router.post("/", createLogisticsPartner);
 router.put("/:id", updateLogisticsPartner);
 router.patch("/status/:logisticsId", updateLogisticsPartnerStatus);

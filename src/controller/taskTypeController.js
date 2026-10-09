@@ -3,6 +3,8 @@ const { Op } = require("sequelize");
 const { TaskType } = require("../models");
 const {
   getPagination,
+  hasPagination,
+  statusFilter,
   buildPaginatedResponse,
 } = require("../utils/pagination");
 const { success, error } = require("../utils/response");
@@ -14,13 +16,23 @@ const getAllTaskTypes = async (req, res, next) => {
     const { search } = req.query;
     const { page, limit, offset } = getPagination(req.query);
 
-    const where = {};
+    const where = statusFilter(req.query.status); // ?status=Active|Inactive
     if (search) {
       const term = `%${search.trim()}%`;
       where[Op.or] = [
         { name: { [Op.like]: term } },
         { taskTypeId: { [Op.like]: term } },
       ];
+    }
+
+    // No page/limit: every match as { id, taskTypeId, name } for dropdowns.
+    if (!hasPagination(req.query)) {
+      const data = await TaskType.findAll({
+        where,
+        attributes: ["id", "taskTypeId", "name"],
+        order: [["name", "ASC"]],
+      });
+      return success(res, 200, "Task types fetched successfully", { data });
     }
 
     const result = await TaskType.findAndCountAll({
@@ -61,15 +73,16 @@ const getTaskTypeById = async (req, res, next) => {
 /** POST /api/task-types */
 const createTaskType = async (req, res, next) => {
   try {
-    const { name, description } = req.body;
+    const { name, description, status } = req.body;
 
     if (!name) return error(res, 400, "name is required");
+    statusFilter(status); // 400 unless Active / Inactive (when sent)
 
     const existing = await TaskType.findOne({ where: { name } });
     if (existing)
       return error(res, 409, "A task type with this name already exists");
 
-    const taskType = await TaskType.create({ name, description });
+    const taskType = await TaskType.create({ name, description, status: status || "Active" });
     const taskTypeId = generateId("TT", taskType?.id);
     await taskType.update({ taskTypeId });
 
@@ -90,7 +103,8 @@ const updateTaskType = async (req, res, next) => {
     const taskType = await TaskType.findByPk(id);
     if (!taskType) return error(res, 404, "Task type not found");
 
-    const { name, description } = req.body;
+    const { name, description, status } = req.body;
+    statusFilter(status); // 400 unless Active / Inactive (when sent)
 
     if (name !== undefined && name !== taskType.name) {
       const existing = await TaskType.findOne({ where: { name } });
@@ -101,6 +115,7 @@ const updateTaskType = async (req, res, next) => {
     await taskType.update({
       ...(name !== undefined && { name }),
       ...(description !== undefined && { description }),
+      ...(status !== undefined && { status }),
     });
 
     return success(res, 200, "Task type updated successfully", {

@@ -7,15 +7,26 @@ const {
   Employee,
   Payment,
   LabourRequest,
+  LabourRequestCropEntry,
   sequelize,
 } = require("../models");
 const {
   getPagination,
+  hasPagination,
+  statusFilter,
   buildPaginatedResponse,
 } = require("../utils/pagination");
 const { success, error } = require("../utils/response");
 const { generateId } = require("../utils/generateIds");
-const { startOfCurrentMonth, resolveSeason, toDateOnly } = require("../utils/periods");
+const { calculateLabourCost } = require("../utils/labourCost");
+const { allotmentVillageInclude } = require("../utils/bagsCommon");
+const {
+  startOfCurrentMonth,
+  resolveSeason,
+  seasonFilter,
+  paymentSeasonWhere,
+  toDateOnly,
+} = require("../utils/periods");
 
 /** GET /api/labor-groups */
 async function getAllLaborGroups(req, res, next) {
@@ -23,7 +34,7 @@ async function getAllLaborGroups(req, res, next) {
     const { search } = req.query;
     const { page, limit, offset } = getPagination(req.query);
 
-    const where = {};
+    const where = statusFilter(req.query.status); // ?status=Active|Inactive
     if (search?.trim()) {
       const term = `%${search.trim().toLowerCase()}%`;
       where[Op.or] = [
@@ -34,6 +45,16 @@ async function getAllLaborGroups(req, res, next) {
           [Op.like]: term,
         }),
       ];
+    }
+
+    // No page/limit: every match as { id, laborGroupId, name } for dropdowns.
+    if (!hasPagination(req.query)) {
+      const data = await LaborGroup.findAll({
+        where,
+        attributes: ["id", "laborGroupId", "name"],
+        order: [["name", "ASC"]],
+      });
+      return success(res, 200, "Labor groups fetched successfully", { data });
     }
 
     const result = await LaborGroup.findAndCountAll({
@@ -340,29 +361,33 @@ async function getGroupPaymentTotals(groupId, season) {
 }
 
 /**
- * GET /labour-groups/summary?season=&year= — Labour groups page KPI cards.
- * wagesDue       = labour payments still pending
- * paidThisSeason = labour payments processed with a payment date in the
- *                  season (current season unless ?season=&year= is given)
+ * GET /labour-groups/summary?season=Kharif|Rabi&year=2026 — Labour groups page KPI cards.
+ * wagesDue / pendingPayments = labour payments still pending (raised in the season)
+ * paidThisSeason             = labour payments processed (paid in the season)
+ * Without season / year the payment figures cover all time (see seasonFilter).
  */
 async function getLaborGroupSummary(req, res, next) {
   try {
-    const season = resolveSeason(req.query);
+    const season = seasonFilter(req.query);
+    const inSeason = paymentSeasonWhere(season);
 
     const [totalGroups, addedThisMonth, wagesDue, pendingPayments, paidThisSeason] = await Promise.all([
       LaborGroup.count(),
       LaborGroup.count({ where: { createdAt: { [Op.gte]: startOfCurrentMonth() } } }),
-      sumPayments({ ...LABOUR_PAYMENT_WHERE, status: "pending" }),
-      Payment.count({ where: { ...LABOUR_PAYMENT_WHERE, status: "pending" } }),
-      sumPayments({
-        ...LABOUR_PAYMENT_WHERE,
-        status: "processed",
-        paymentDate: { [Op.gte]: toDateOnly(season.start), [Op.lt]: toDateOnly(season.end) },
-      }),
+      sumPayments({ ...LABOUR_PAYMENT_WHERE, status: "pending", ...inSeason }),
+      Payment.count({ where: { ...LABOUR_PAYMENT_WHERE, status: "pending", ...inSeason } }),
+      sumPayments({ ...LABOUR_PAYMENT_WHERE, status: "processed", ...inSeason }),
     ]);
 
     return success(res, 200, "Labour group summary fetched successfully", {
-      data: { totalGroups, addedThisMonth, wagesDue, pendingPayments, paidThisSeason, season: season.label },
+      data: {
+        totalGroups,
+        addedThisMonth,
+        wagesDue,
+        pendingPayments,
+        paidThisSeason,
+        season: season ? season.label : "All time",
+      },
     });
   } catch (err) {
     next(err);
@@ -377,12 +402,85 @@ async function getLaborGroupSummary(req, res, next) {
  * request), approvedBy (who created the payment), processedBy, amount,
  * date, mode, status, sourceCode.
  */
+/**
+ * GET /labour-groups/:id/payments/:paymentId — the payment drawer:
+ * wage breakdown of one settlement for this labour group.
+ *   numberOfMembers  Σ labourCount of the labour request's crop rows
+ *   pricePerPerson   the group's crop rate (null when crops have different
+ *                    rates — see cropBreakdown for each one)
+ *   transportCharges transportCost set at verification / approval
+ *   totalAmount      what the payment is for (the Payment amount)
+ *   referenceNo      payment reference ID (once processed)
+ *   requestedDate    when the labour request was raised
+ */
+async function getLaborGroupPaymentById(req, res, next) {
+  try {
+    const payment = await Payment.findOne({
+      where: { id: req.params.paymentId, recipientType: "labor_group", recipientId: req.params.id },
+      include: [
+        { model: Employee, as: "creator", attributes: PERSON_ATTRS },
+        { model: Employee, as: "processor", attributes: PERSON_ATTRS },
+      ],
+    });
+    if (!payment) return error(res, 404, "Payment not found for this labour group");
+
+    const request =
+      payment.sourceRequestType === "labour_request"
+        ? await LabourRequest.findByPk(payment.sourceRequestId, {
+            include: [
+              { model: Employee, as: "requester", attributes: PERSON_ATTRS },
+              {
+                model: LabourRequestCropEntry,
+                as: "cropEntries",
+                include: allotmentVillageInclude("allotmentVillage"),
+              },
+            ],
+          })
+        : null;
+
+    const cost = request ? await calculateLabourCost(request) : null;
+    const prices = [...new Set((cost?.cropCosts || []).map((c) => c.pricePerPerson).filter((p) => p !== null))];
+
+    return success(res, 200, "Labour group payment fetched successfully", {
+      data: {
+        id: payment.id,
+        paymentCode: payment.paymentCode,
+        status: payment.status,
+        sourceCode: request?.requestCode || null,
+
+        numberOfMembers: (cost?.cropCosts || []).reduce((sum, c) => sum + c.labourCount, 0),
+        pricePerPerson: prices.length === 1 ? prices[0] : null,
+        cropBreakdown: (cost?.cropCosts || []).map(({ cropName, labourCount, pricePerPerson, subtotal }) => ({
+          cropName,
+          labourCount,
+          pricePerPerson,
+          subtotal,
+        })),
+        labourCost: cost?.labourCostSubtotal ?? null,
+        transportCharges: cost?.transportCost ?? 0,
+        totalAmount: Number(payment.amount),
+
+        referenceNo: payment.referenceId,
+        paymentMode: payment.paymentMode,
+        paymentDate: payment.paymentDate,
+        requestedDate: request?.createdAt || null,
+
+        requestedBy: request?.requester || null,
+        approvedBy: payment.creator,
+        processedBy: payment.processor,
+      },
+    });
+  } catch (err) {
+    next(err);
+  }
+}
+
 async function getLaborGroupPayments(req, res, next) {
   try {
     const group = await LaborGroup.findByPk(req.params.id, { attributes: ["id"] });
     if (!group) return error(res, 404, "Labour group not found");
 
-    const where = { recipientType: "labor_group", recipientId: group.id };
+    const where = { recipientType: "labor_group", recipientId: group.id, ...paymentSeasonWhere(seasonFilter(req.query)) };
     if (["pending", "processed"].includes(req.query.status)) where.status = req.query.status;
 
     const { page, limit, offset } = getPagination(req.query);
@@ -443,6 +541,7 @@ async function getLaborGroupPayments(req, res, next) {
 module.exports = {
   getLaborGroupSummary,
   getLaborGroupPayments,
+  getLaborGroupPaymentById,
   getAllLaborGroups,
   getLaborGroupById,
   createLaborGroup,

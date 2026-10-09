@@ -1,6 +1,7 @@
 "use strict";
 const { generateId } = require("../utils/generateIds");
 const { sequelize, Crop, CompanyCrop } = require("../models");
+const { statusFilter } = require("../utils/pagination");
 const {
   createCropSchema,
   updateCropSchema,
@@ -9,12 +10,14 @@ const {
 async function getAllCrops(req, res, next) {
   try {
     const { page, limit } = req.query;
+    const where = statusFilter(req.query.status); // ?status=Active|Inactive
 
-    // No pagination parameters → return all crops
+    // No pagination parameters → return all crops as { id, cropId, name }
     if (page === undefined && limit === undefined) {
       const crops = await Crop.findAll({
-        attributes: ["id", "name"],
-        order: [["createdAt", "DESC"]],
+        where,
+        attributes: ["id", "cropId", "name"],
+        order: [["name", "ASC"]],
       });
 
       return res.status(200).json({
@@ -44,6 +47,7 @@ async function getAllCrops(req, res, next) {
     const offset = (pageNumber - 1) * limitNumber;
 
     const { count, rows } = await Crop.findAndCountAll({
+      where,
       attributes: {
         include: [
           [

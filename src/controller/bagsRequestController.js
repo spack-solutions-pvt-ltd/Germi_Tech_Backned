@@ -26,7 +26,10 @@ const {
   resolveRequestOwner,
   assertRequestOwner,
   isRequestOwner,
+  myRequestsScope,
+  creatorFlags,
 } = require("../utils/requestOwnership");
+const { assertAllotmentOpen } = require("../utils/allotmentStatus");
 
 // Allowed transitions. There is no Approval-page stage for bags. A request
 // can be cancelled at any stage until it is received; a "received" request
@@ -132,8 +135,11 @@ async function fetchFull(id) {
   });
 }
 
-/** Validates crop entries against the supervisor the request is for. */
-async function validateEntries(cropEntries, supervisorId) {
+/**
+ * Validates crop entries against the supervisor the request is for.
+ * keepIds: allotments a request being edited already has (allowed even if closed since).
+ */
+async function validateEntries(cropEntries, supervisorId, keepIds = []) {
   if (!Array.isArray(cropEntries) || !cropEntries.length) {
     throw httpError(400, "At least one crop entry is required");
   }
@@ -165,6 +171,7 @@ async function validateEntries(cropEntries, supervisorId) {
         `Employee ${supervisorId} is not the assigned supervisor for allotmentVillageId ${avId}`,
       );
     }
+    assertAllotmentOpen(av, `allotmentVillageId ${avId}`, keepIds);
     cleaned.push({ allotmentVillageId: avId, requiredBags });
   }
   return cleaned;
@@ -175,7 +182,7 @@ async function validateEntries(cropEntries, supervisorId) {
 /* ------------------------------------------------------------------ */
 
 /** Shared list logic — `baseWhere` is built by the caller so "mine" vs "everyone's" can differ. */
-async function listBagsRequests(baseWhere, req, res, next) {
+async function listBagsRequests(baseWhere, req, res, next, { viewerId } = {}) {
   try {
     const { page, limit, offset } = getPagination(req.query);
     const { status, village: villageId, search } = req.query;
@@ -206,16 +213,23 @@ async function listBagsRequests(baseWhere, req, res, next) {
     });
 
     const response = buildPaginatedResponse(result, page, limit);
-    response.data = result.rows.map(decorate);
+    response.data = result.rows.map((row) => {
+      const json = decorate(row);
+      // createdByMe / createdOnBehalf / canEdit — "my requests" only
+      return viewerId ? { ...json, ...creatorFlags(json, viewerId) } : json;
+    });
     return success(res, 200, "Bags requests fetched successfully", response);
   } catch (err) {
     next(err);
   }
 }
 
-/** GET /bag-requests/my-requests — Requests → Bags: own requests */
+/**
+ * GET /bag-requests/my-requests — Requests → Bags: requests raised for me +
+ * requests I created for a supervisor, each with createdByMe / canEdit.
+ */
 async function getMyBagsRequests(req, res, next) {
-  return listBagsRequests({ requestedBy: req.employee.id }, req, res, next);
+  return listBagsRequests(myRequestsScope(req.employee.id), req, res, next, { viewerId: req.employee.id });
 }
 
 /** GET /bag-requests — Verifications → Bags: every supervisor's requests */
@@ -269,7 +283,7 @@ async function buildSummary(where) {
 /** GET /bag-requests/my-summary */
 async function getMyBagsSummary(req, res, next) {
   try {
-    const data = await buildSummary({ requestedBy: req.employee.id });
+    const data = await buildSummary(myRequestsScope(req.employee.id));
     return success(res, 200, "Bags summary fetched successfully", { data });
   } catch (err) {
     next(err);
@@ -361,9 +375,18 @@ async function updateBagsRequest(req, res, next) {
     }
 
     const rawEntries = parseCropEntries(req.body.cropEntries);
+    const keepIds =
+      rawEntries !== undefined
+        ? (
+            await BagsRequestCropEntry.findAll({
+              where: { bagsRequestId: request.id },
+              attributes: ["allotmentVillageId"],
+            })
+          ).map((e) => e.allotmentVillageId)
+        : [];
     const cropEntries =
       rawEntries !== undefined
-        ? await validateEntries(rawEntries, request.requestedBy)
+        ? await validateEntries(rawEntries, request.requestedBy, keepIds)
         : undefined;
 
     await sequelize.transaction(async (t) => {

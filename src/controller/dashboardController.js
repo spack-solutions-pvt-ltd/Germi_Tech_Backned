@@ -23,6 +23,7 @@ const {
 const { success, error } = require("../utils/response");
 const { allotmentVillageInclude, EMP_ATTRS } = require("../utils/bagsCommon");
 const { allotmentScope, resolveSeason } = require("../utils/periods");
+const { OPEN_ALLOTMENT } = require("../utils/allotmentStatus");
 const { getPagination, buildPaginatedResponse } = require("../utils/pagination");
 
 const OPEN_TASK_STATUSES = ["Pending", "Approval", "Reassigned", "Overdue"];
@@ -360,23 +361,22 @@ async function rowingAcres(allotmentVillageIds) {
 /**
  * Which allotments an L3 supervisor sees on the dashboard: their village
  * allotments in THIS season (?season=&year= to change) whose village allotment
- * status is open (?status=closed to change). Shared by the cards and the list,
- * so their numbers always match.
+ * is open — a closed one is never shown to the supervisor. Shared by the cards
+ * and the list, so their numbers always match.
  */
 function l3AllotmentQuery(req) {
   const season = resolveSeason(req.query);
-  const status = ["open", "closed"].includes(req.query.status) ? req.query.status : "open";
   return {
-    label: `${season.label} · ${status}`,
+    label: `${season.label} · open`,
     options: {
-      where: { supervisorId: req.employee.id, status },
+      where: { supervisorId: req.employee.id, ...OPEN_ALLOTMENT },
       include: [
         { model: Village, as: "village", attributes: ["id", "name"] },
         {
           model: Allotment,
           as: "allotment",
           attributes: ["id", "allotmentId", "season", "year", "status"],
-          where: { season: season.season, year: season.year },
+          where: { season: season.season, year: season.cropYear },
           include: {
             model: CompanyCrop,
             as: "companyCrop",

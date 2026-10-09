@@ -28,7 +28,7 @@ module.exports = (sequelize, DataTypes) => {
       reqAcres: DataTypes.DECIMAL(10, 2),
       reqQtyKgs: DataTypes.DECIMAL(10, 2),
       season: { type: DataTypes.ENUM("Kharif", "Rabi"), allowNull: false },
-      year: DataTypes.INTEGER,
+      year: DataTypes.STRING(10), // crop year, e.g. "25-26" (Kharif 25-26 = Jun–Oct 2025, Rabi 25-26 = Nov 2025–May 2026)
       status: {
         type: DataTypes.ENUM("open", "closed"),
         allowNull: false,

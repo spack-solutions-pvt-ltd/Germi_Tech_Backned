@@ -11,6 +11,8 @@ const { generateDummyPassword } = require("../utils/randomPassword");
 const { sendMail } = require("../utils/mailer");
 const {
   getPagination,
+  hasPagination,
+  statusFilter,
   buildPaginatedResponse,
 } = require("../utils/pagination");
 const { success, error } = require("../utils/response");
@@ -116,8 +118,18 @@ async function getAllEmployees(req, res, next) {
       ];
     }
     if (level) where.level = level;
-    if (status) where.status = status;
+    Object.assign(where, statusFilter(status)); // ?status=Active|Inactive
     if (roleId) where.roleId = roleId;
+
+    // No page/limit: every match as { id, empId, name } for dropdowns.
+    if (!hasPagination(req.query)) {
+      const data = await Employee.findAll({
+        where,
+        attributes: ["id", "empId", "name"],
+        order: [["name", "ASC"]],
+      });
+      return success(res, 200, "Employees fetched successfully", { data });
+    }
 
     const result = await Employee.findAndCountAll({
       where,

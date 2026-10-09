@@ -24,6 +24,11 @@ module.exports = (sequelize, DataTypes) => {
       contactNumber: DataTypes.STRING,
       upiNumber: DataTypes.STRING,
       createdBy: DataTypes.INTEGER,
+      status: {
+        type: DataTypes.ENUM("Active", "Inactive"),
+        allowNull: false,
+        defaultValue: "Active",
+      },
     },
     {
       sequelize,
