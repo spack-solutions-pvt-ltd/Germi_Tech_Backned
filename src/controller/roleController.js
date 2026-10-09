@@ -57,7 +57,7 @@ const getAllRoles = async (req, res, next) => {
       const data = await Role.findAll({
         where,
         attributes: ["id", "roleId", "name"],
-        order: [["name", "ASC"]],
+        order: [["createdAt", "DESC"]],
       });
       return success(res, 200, "Roles fetched successfully", { data });
     }

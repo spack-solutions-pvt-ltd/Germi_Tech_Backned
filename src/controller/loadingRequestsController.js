@@ -722,7 +722,7 @@ async function getLoadingWarehouses(req, res, next) {
     const data = await Warehouse.findAll({
       where,
       attributes: ["id", "warehouseId", "locationName"],
-      order: [["locationName", "ASC"]],
+      order: [["createdAt", "DESC"]],
     });
     return success(res, 200, "Warehouses fetched successfully", { data });
   } catch (err) {

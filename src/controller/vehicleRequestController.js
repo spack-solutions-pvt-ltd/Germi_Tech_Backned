@@ -159,7 +159,7 @@ async function getWarehousesForAllotmentVillage(req, res, next) {
           attributes: ["id", "name", "companyId"],
         },
       ],
-      order: [["locationName", "ASC"]],
+      order: [["createdAt", "DESC"]],
     });
 
     return success(res, 200, "Warehouses fetched successfully", {

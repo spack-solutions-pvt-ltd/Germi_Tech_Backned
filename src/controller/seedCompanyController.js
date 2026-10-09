@@ -40,7 +40,7 @@ const getAllSeedCompanies = async (req, res, next) => {
       const data = await SeedCompany.findAll({
         where,
         attributes: ["id", "companyId", "name"],
-        order: [["name", "ASC"]],
+        order: [["createdAt", "DESC"]],
       });
       return success(res, 200, "Seed companies fetched successfully", { data });
     }

@@ -250,7 +250,7 @@ async function getPaymentFilterOptions(req, res, next) {
     const employees = await Employee.findAll({
       where: { id: [...new Set([...creatorIds, ...processorIds])] },
       attributes: EMP_ATTRS,
-      order: [["name", "ASC"]],
+      order: [["createdAt", "DESC"]],
     });
     const pick = (ids) => employees.filter((e) => ids.includes(e.id));
 

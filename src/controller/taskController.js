@@ -228,7 +228,7 @@ async function getMyTasks(req, res, next) {
       Task.findAndCountAll({
         where,
         include: TASK_INCLUDES,
-        order: [["dueDate", "ASC"]],
+        order: [["createdAt", "DESC"]],
         limit,
         offset,
       }),

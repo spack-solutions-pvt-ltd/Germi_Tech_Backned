@@ -37,9 +37,11 @@ async function getAllCropVarieties(req, res, next) {
     if (!hasPagination(req.query)) {
       const data = await CompanyCrop.findAll({
         where,
-        attributes: ["id", "companyCropId", "varietyName"],
-        include: [{ model: Crop, as: "crop", attributes: ["id", "cropId", "name"] }],
-        order: [["varietyName", "ASC"]],
+        attributes: ["id", "companyCropId", "varietyName", "status"],
+        include: [
+          { model: Crop, as: "crop", attributes: ["id", "cropId", "name"] },
+        ],
+        order: [["createdAt", "DESC"]],
       });
       return success(res, 200, "Crop varieties fetched successfully", { data });
     }

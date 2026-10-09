@@ -32,7 +32,7 @@ const getAllSubOrganizers = async (req, res, next) => {
       const data = await SubOrganizer.findAll({
         where,
         attributes: ["id", "subOrganizerId", "name"],
-        order: [["name", "ASC"]],
+        order: [["createdAt", "DESC"]],
       });
       return success(res, 200, "Sub organizers fetched successfully", { data });
     }
@@ -99,7 +99,7 @@ const getSubOrganizersByVillageId = async (req, res, next) => {
       include: [
         { model: Employee, as: "creator", attributes: ["id", "name", "empId"] },
       ],
-      order: [["name", "ASC"]],
+      order: [["createdAt", "DESC"]],
       limit,
       offset,
     });

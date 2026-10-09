@@ -126,7 +126,7 @@ async function getAllEmployees(req, res, next) {
       const data = await Employee.findAll({
         where,
         attributes: ["id", "empId", "name"],
-        order: [["name", "ASC"]],
+        order: [["createdAt", "DESC"]],
       });
       return success(res, 200, "Employees fetched successfully", { data });
     }

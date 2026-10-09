@@ -37,7 +37,7 @@ const getAllVillages = async (req, res, next) => {
       const data = await Village.findAll({
         where,
         attributes: ["id", "villageId", "name"],
-        order: [["name", "ASC"]],
+        order: [["createdAt", "DESC"]],
       });
       return success(res, 200, "Villages fetched successfully", { data });
     }

@@ -53,7 +53,7 @@ const getAllLogisticsPartners = async (req, res, next) => {
       const data = await LogisticsPartner.findAll({
         where,
         attributes: ["id", "logisticsId", "name"],
-        order: [["name", "ASC"]],
+        order: [["createdAt", "DESC"]],
       });
       return success(res, 200, "Logistics partners fetched successfully", {
         data,

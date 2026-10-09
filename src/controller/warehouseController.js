@@ -78,7 +78,7 @@ const getWarehousesByCompanyId = async (req, res, next) => {
 
     const { rows, count } = await Warehouse.findAndCountAll({
       where: where,
-      order: [["id", "ASC"]],
+      order: [["createdAt", "DESC"]],
       limit,
       offset,
     });

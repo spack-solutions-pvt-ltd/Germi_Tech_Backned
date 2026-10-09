@@ -17,7 +17,7 @@ async function getAllCrops(req, res, next) {
       const crops = await Crop.findAll({
         where,
         attributes: ["id", "cropId", "name"],
-        order: [["name", "ASC"]],
+        order: [["createdAt", "DESC"]],
       });
 
       return res.status(200).json({

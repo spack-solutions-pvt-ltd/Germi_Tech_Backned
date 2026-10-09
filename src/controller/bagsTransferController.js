@@ -313,7 +313,7 @@ async function getBagsBalance(req, res, next) {
 /** GET /bag-transfers/companies — "Company" dropdown: Germi Tech + seed companies */
 async function getDestinationCompanies(req, res, next) {
   try {
-    const seedCompanies = await SeedCompany.findAll({ attributes: ["id", "name"], order: [["name", "ASC"]] });
+    const seedCompanies = await SeedCompany.findAll({ attributes: ["id", "name"], order: [["createdAt", "DESC"]] });
     const data = [
       { toCompanyType: "germitech", toCompanyId: null, name: GERMITECH_COMPANY_NAME },
       ...seedCompanies.map((c) => ({ toCompanyType: "seed_company", toCompanyId: c.id, name: c.name })),
@@ -332,7 +332,7 @@ async function getSupervisors(req, res, next) {
     const data = await Employee.findAll({
       where: { level: "L3", status: "Active", id: { [Op.ne]: senderId } },
       attributes: ["id", "empId", "name", "level"],
-      order: [["name", "ASC"]],
+      order: [["createdAt", "DESC"]],
     });
     return success(res, 200, "Supervisors fetched successfully", { data });
   } catch (err) {

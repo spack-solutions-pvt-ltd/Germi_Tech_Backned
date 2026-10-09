@@ -30,7 +30,7 @@ const getAllTaskTypes = async (req, res, next) => {
       const data = await TaskType.findAll({
         where,
         attributes: ["id", "taskTypeId", "name"],
-        order: [["name", "ASC"]],
+        order: [["createdAt", "DESC"]],
       });
       return success(res, 200, "Task types fetched successfully", { data });
     }

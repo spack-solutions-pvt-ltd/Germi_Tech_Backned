@@ -38,12 +38,8 @@ async function getAllLaborGroups(req, res, next) {
     if (search?.trim()) {
       const term = `%${search.trim().toLowerCase()}%`;
       where[Op.or] = [
-        sequelizeWhere(fn("LOWER", col("name")), {
-          [Op.like]: term,
-        }),
-        sequelizeWhere(fn("LOWER", col("laborGroupId")), {
-          [Op.like]: term,
-        }),
+        { name: { [Op.like]: term } },
+        { laborGroupId: { [Op.like]: term } },
       ];
     }
 
@@ -52,7 +48,7 @@ async function getAllLaborGroups(req, res, next) {
       const data = await LaborGroup.findAll({
         where,
         attributes: ["id", "laborGroupId", "name"],
-        order: [["name", "ASC"]],
+        order: [["createdAt", "DESC"]],
       });
       return success(res, 200, "Labor groups fetched successfully", { data });
     }

@@ -11,6 +11,7 @@ const {
   addVillageAllotment,
   updateVillageAllotment,
   getMyAssignedAllotmentVillages,
+  getVillageAllotmentsByAllotment,
 } = require("../controller/allotmentController");
 
 const router = Router();
@@ -26,6 +27,7 @@ router.post("/", createAllotment);
 router.put("/:id", updateAllotment);
 router.delete("/:id", deleteAllotment);
 
+router.get("/:id/villages", getVillageAllotmentsByAllotment); // village allotments of one allotment
 router.post("/:id/villages", addVillageAllotment);
 router.put("/:id/villages/:villageAllotmentId", updateVillageAllotment);
 

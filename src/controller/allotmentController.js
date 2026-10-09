@@ -13,6 +13,7 @@ const {
 } = require("../models");
 const {
   getPagination,
+  hasPagination,
   buildPaginatedResponse,
 } = require("../utils/pagination");
 const { success, error } = require("../utils/response");
@@ -130,7 +131,13 @@ const getAllotmentSummary = async (where, cropId) => {
  */
 const getAllAllotments = async (req, res, next) => {
   try {
-    const { search, companyId, cropId, season, year } = req.query;
+    const {
+      search,
+      company: companyId,
+      crop: cropId,
+      season,
+      year,
+    } = req.query;
     const { page, limit, offset } = getPagination(req.query);
 
     const where = {};
@@ -183,7 +190,13 @@ const getAllAllotments = async (req, res, next) => {
  */
 const getAllotmentVillageTable = async (req, res, next) => {
   try {
-    const { villageId, companyId, season, year, supervisorId } = req.query;
+    const {
+      villageId,
+      company: companyId,
+      season,
+      year,
+      supervisorId,
+    } = req.query;
     const { page, limit, offset } = getPagination(req.query);
 
     const where = {};
@@ -219,7 +232,7 @@ const getAllotmentVillageTable = async (req, res, next) => {
         },
       ],
       distinct: true,
-      order: [["id", "DESC"]],
+      order: [["createdAt", "DESC"]],
       limit,
       offset,
     });
@@ -279,7 +292,7 @@ const getAllotmentById = async (req, res, next) => {
             },
           ],
           separate: true,
-          order: [["id", "ASC"]],
+          order: [["createdAt", "DESC"]],
         },
       ],
     });
@@ -288,6 +301,144 @@ const getAllotmentById = async (req, res, next) => {
 
     return success(res, 200, "Allotment fetched successfully", {
       data: withVillageTotals(allotment),
+    });
+  } catch (err) {
+    next(err);
+  }
+};
+
+/**
+ * GET /allotments/:id/villages?page=&limit=&search=&status=open|closed&supervisorId=&villageId=
+ * Village allotments of one allotment (the allotment's numeric id), with:
+ *   allotment — header: code, company, crop, variety, season, year, status, reqAcres
+ *   totals    — over ALL its village rows (filters don't change them):
+ *               allottedAcres, standingAcres, gpsPendingAcres, balanceAcres, villages
+ *   data      — the village rows (filtered + paginated)
+ * Without page/limit, every matching row is returned (no pagination block).
+ */
+const getVillageAllotmentsByAllotment = async (req, res, next) => {
+  try {
+    const allotment = await Allotment.findByPk(req.params.id, {
+      attributes: [
+        "id",
+        "allotmentId",
+        "season",
+        "year",
+        "status",
+        "reqAcres",
+        "reqQtyKgs",
+      ],
+      include: [
+        {
+          model: SeedCompany,
+          as: "company",
+          attributes: ["id", "companyId", "name"],
+        },
+        {
+          model: CompanyCrop,
+          as: "companyCrop",
+          attributes: ["id", "companyCropId", "varietyName"],
+          include: {
+            model: Crop,
+            as: "crop",
+            attributes: ["id", "cropId", "name"],
+          },
+        },
+      ],
+    });
+    if (!allotment) return error(res, 404, "Allotment not found");
+
+    const { search, supervisorId, villageId } = req.query;
+    let status;
+    if (req.query.status !== undefined) {
+      status = normalizeAllotmentStatus(req.query.status);
+      if (!status) return error(res, 400, "status must be open or closed");
+    }
+
+    const where = { allotmentId: allotment.id };
+    if (status) where.status = status;
+    if (supervisorId) where.supervisorId = supervisorId;
+    if (villageId) where.villageId = villageId;
+    if (search) {
+      const term = `%${search.trim()}%`;
+      where[Op.or] = [
+        { allotmentVillageId: { [Op.like]: term } },
+        { "$village.name$": { [Op.like]: term } },
+        { "$subOrganizer.name$": { [Op.like]: term } },
+        { "$supervisor.name$": { [Op.like]: term } },
+        { "$supervisor.empId$": { [Op.like]: term } },
+      ];
+    }
+
+    const query = {
+      where,
+      attributes: [
+        "id",
+        "allotmentVillageId",
+        "allottedAcres",
+        "standingAcres",
+        "gpsPendingAcres",
+        "status",
+        "createdAt",
+      ],
+      include: [
+        {
+          model: Village,
+          as: "village",
+          attributes: ["id", "villageId", "name"],
+        },
+        {
+          model: SubOrganizer,
+          as: "subOrganizer",
+          attributes: ["id", "subOrganizerId", "name"],
+        },
+        {
+          model: Employee,
+          as: "supervisor",
+          attributes: ["id", "empId", "name", "level"],
+        },
+      ],
+      order: [["createdAt", "DESC"]],
+    };
+
+    // Totals over every village row of the allotment, whatever the filters.
+    const sumOf = (field) =>
+      AllotmentVillage.sum(field, { where: { allotmentId: allotment.id } });
+    const [allotted, standing, gpsPending, villages] = await Promise.all([
+      sumOf("allottedAcres"),
+      sumOf("standingAcres"),
+      sumOf("gpsPendingAcres"),
+      AllotmentVillage.count({ where: { allotmentId: allotment.id } }),
+    ]);
+    const allottedAcres = Number(allotted) || 0;
+    const totals = {
+      villages,
+      allottedAcres,
+      standingAcres: Number(standing) || 0,
+      gpsPendingAcres: Number(gpsPending) || 0,
+      balanceAcres: (Number(allotment.reqAcres) || 0) - allottedAcres,
+    };
+
+    if (!hasPagination(req.query)) {
+      const data = await AllotmentVillage.findAll(query);
+      return success(res, 200, "Village allotments fetched successfully", {
+        allotment,
+        totals,
+        data,
+      });
+    }
+
+    const { page, limit, offset } = getPagination(req.query);
+    const result = await AllotmentVillage.findAndCountAll({
+      ...query,
+      limit,
+      offset,
+      distinct: true,
+    });
+    return success(res, 200, "Village allotments fetched successfully", {
+      allotment,
+      totals,
+      ...buildPaginatedResponse(result, page, limit),
     });
   } catch (err) {
     next(err);
@@ -711,7 +862,7 @@ const getSupervisorOptions = async (req, res, next) => {
         id: { [Op.ne]: req.employee.id },
       },
       attributes: ["id", "empId", "name", "level"],
-      order: [["name", "ASC"]],
+      order: [["createdAt", "DESC"]],
     });
     return success(res, 200, "Supervisors fetched successfully", { data });
   } catch (err) {
@@ -771,6 +922,7 @@ const getAllotmentsSummary = async (req, res, next) => {
 };
 
 module.exports = {
+  getVillageAllotmentsByAllotment,
   getAllotmentsSummary,
   getAllAllotments,
   getAllotmentVillageTable,
