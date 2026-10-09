@@ -95,7 +95,7 @@ const PERMISSION_MODULES = [
     module: "requests",
     label: "Requests",
     actions: [
-      { action: "global", name: "Global" },
+      { action: "global_view", name: "Global View" },
       { action: "view", name: "View" },
       { action: "add", name: "Add" },
       { action: "edit", name: "Edit" },
