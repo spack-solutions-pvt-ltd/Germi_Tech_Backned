@@ -255,47 +255,10 @@ const getAllotmentById = async (req, res, next) => {
   try {
     const { id } = req.params;
     if (!id) return error(res, 400, "id is required");
-    const { search } = req.query;
-    const villageWhere = {};
-
-    if (search) {
-      const term = `%${search.trim()}%`;
-      villageWhere[Op.or] = [
-        { "$village.name$": { [Op.like]: term } },
-        { $allotmentVillageId$: { [Op.like]: term } },
-        { "$subOrganizer.name$": { [Op.like]: term } },
-        { "$supervisor.name$": { [Op.like]: term } },
-        { "$supervisor.empId$": { [Op.like]: term } },
-      ];
-    }
 
     const allotment = await Allotment.findByPk(id, {
       include: [
-        ...ALLOTMENT_INCLUDES,
-        {
-          model: AllotmentVillage,
-          where: villageWhere,
-          as: "villageAllotments",
-          include: [
-            {
-              model: Village,
-              as: "village",
-              attributes: ["id", "villageId", "name"],
-            },
-            {
-              model: SubOrganizer,
-              as: "subOrganizer",
-              attributes: ["id", "name"],
-            },
-            {
-              model: Employee,
-              as: "supervisor",
-              attributes: ["id", "empId", "name", "level"],
-            },
-          ],
-          separate: true,
-          order: [["createdAt", "DESC"]],
-        },
+        ...ALLOTMENT_INCLUDES
       ],
     });
 
@@ -699,6 +662,7 @@ async function updateVillageAllotment(req, res, next) {
       gpsPendingAcres,
       supervisorId,
       subOrganizerId,
+      villageId
     } = req.body;
 
     // "opened" / "open" / "closed". Closed = hidden from the supervisor
@@ -741,6 +705,7 @@ async function updateVillageAllotment(req, res, next) {
     }
 
     await villageAllotment.update({
+      ...(villageId !== undefined && { villageId }),
       ...(allottedAcres !== undefined && { allottedAcres }),
       ...(standingAcres !== undefined && { standingAcres }),
       ...(gpsPendingAcres !== undefined && { gpsPendingAcres }),

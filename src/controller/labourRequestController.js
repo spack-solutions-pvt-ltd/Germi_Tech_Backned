@@ -1,4 +1,5 @@
 "use strict";
+const { Op } = require("sequelize");
 const {
   LabourRequest,
   LabourRequestCropEntry,
@@ -101,15 +102,48 @@ function parseTransportCost(value) {
   return Number.isFinite(cost) && cost >= 0 ? cost : null;
 }
 
-/** Shared list logic — `where` is built by the caller so "mine" vs "everyone's" can differ. */
-async function listLabourRequests(where, req, res, next, { viewerId } = {}) {
+/** Ids of labour requests with a crop row in a village matching `villageWhere` (Village columns). */
+async function labourRequestIdsInVillages(villageWhere) {
+  const rows = await LabourRequestCropEntry.findAll({
+    attributes: ["labourRequestId"],
+    include: {
+      model: AllotmentVillage,
+      as: "allotmentVillage",
+      attributes: [],
+      required: true,
+      include: { model: Village, as: "village", attributes: [], required: true, where: villageWhere },
+    },
+    raw: true,
+  });
+  return [...new Set(rows.map((r) => r.labourRequestId))];
+}
+
+/**
+ * Shared list logic — `baseWhere` is built by the caller so "mine" vs
+ * "everyone's" can differ. Filters: ?status=, ?villageId=, ?search= (request
+ * code or village name).
+ */
+async function listLabourRequests(baseWhere, req, res, next, { viewerId } = {}) {
   try {
     const { page, limit, offset } = getPagination(req.query);
-    const { status } = req.query;
-    if (status) where.status = status;
+    const { status, villageId, search } = req.query;
+
+    const and = [baseWhere];
+    if (status) and.push({ status });
+    // A request's village comes from its crop rows' allotments.
+    if (villageId) and.push({ id: await labourRequestIdsInVillages({ id: villageId }) });
+    if (search?.trim()) {
+      const term = `%${search.trim()}%`;
+      and.push({
+        [Op.or]: [
+          { requestCode: { [Op.like]: term } },
+          { id: await labourRequestIdsInVillages({ name: { [Op.like]: term } }) },
+        ],
+      });
+    }
 
     const result = await LabourRequest.findAndCountAll({
-      where,
+      where: { [Op.and]: and },
       include: [...HEADER_INCLUDES, LIST_ENTRY_INCLUDE],
       order: [["createdAt", "DESC"]],
       limit,

@@ -67,16 +67,16 @@ const INCLUDES = [
 const listVehicleRequests = async (where, req, res, next, { viewerId } = {}) => {
   try {
     const { page, limit, offset } = getPagination(req.query);
-    const { status, village, search } = req.query;
+    const { status, villageId, search } = req.query;
 
     if (status) where.status = status;
     if (search) where.requestCode = search;
 
     // "village" is a Village id. A request points at an AllotmentVillage, so
     // filter on the allotment-villages that belong to that village.
-    if (village) {
+    if (villageId) {
       const allotmentVillages = await AllotmentVillage.findAll({
-        where: { villageId: village },
+        where: { villageId: villageId },
         attributes: ["id"],
       });
       where.allotmentVillageId = allotmentVillages.map((av) => av.id);

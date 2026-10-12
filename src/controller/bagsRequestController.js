@@ -186,7 +186,7 @@ async function validateEntries(cropEntries, supervisorId, keepIds = []) {
 async function listBagsRequests(baseWhere, req, res, next, { viewerId } = {}) {
   try {
     const { page, limit, offset } = getPagination(req.query);
-    const { status, village: villageId, search } = req.query;
+    const { status, villageId, search } = req.query;
 
     const where = { ...baseWhere };
     if (status) where.status = status;
@@ -430,9 +430,10 @@ function authorizeTransition(request, toStatus, employee) {
       : "Only L1/L2 can process and dispatch bags requests";
   }
   if (["received", "not_received"].includes(toStatus)) {
-    return request.requestedBy === employee.id
+    // The supervisor, or whoever raised the request on their behalf.
+    return isRequestOwner(request, employee)
       ? null
-      : "Only the requesting supervisor can confirm receipt";
+      : "Only the requesting supervisor or the person who raised the request can confirm receipt";
   }
   if (toStatus === "cancelled") {
     return isRequestOwner(request, employee) || isProcessor(employee)
