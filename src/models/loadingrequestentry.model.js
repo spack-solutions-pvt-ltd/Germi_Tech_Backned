@@ -10,6 +10,9 @@ module.exports = (sequelize, DataTypes) => {
       this.belongsTo(models.LoadingRequest, { foreignKey: "loadingRequestId", as: "loadingRequest" });
       this.belongsTo(models.AllotmentVillage, { foreignKey: "allotmentVillageId", as: "allotmentVillage" });
       this.belongsTo(models.Employee, { foreignKey: "supervisorId", as: "supervisor" });
+      // The allotment's bag stock (supervisorId + allotmentVillageId) these
+      // bags were taken from — set when the request is approved.
+      this.belongsTo(models.BagsBalance, { foreignKey: "bagsBalanceId", as: "bagsBalance" });
     }
   }
 
@@ -22,6 +25,9 @@ module.exports = (sequelize, DataTypes) => {
       dkQuantity: { type: DataTypes.DECIMAL(12, 2), allowNull: false, defaultValue: 0 }, // charged weight (kgs)
       dkPhotoUrl: fileUrlAttribute(DataTypes, "dkPhotoUrl"), // S3 key (or legacy /uploads path); reads return the viewable URL
       dkPhotoName: DataTypes.STRING(255), // original file name, e.g. "dk-slip.jpg"
+      // Set when the request is approved and noOfBags are deducted (usedBags)
+      // from this allotment's BagsBalance. Null = not deducted yet.
+      bagsBalanceId: DataTypes.INTEGER,
     },
     {
       sequelize,

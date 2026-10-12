@@ -6,9 +6,10 @@ const { Employee } = require("../models");
 //
 // A request has an owner (the supervisor it is for — requestedBy, or
 // senderId for bag transfers) and a creator (createdBy — differs when
-// someone raised it on the supervisor's behalf). Both of them:
-//   - can edit it while it is still pending
-//   - can NOT verify / approve / process it themselves
+// someone raised it on the supervisor's behalf).
+//   - owner and creator can edit it while it is still pending
+//   - only the owner can NOT verify / approve / process it — an L1/L2 who
+//     raised it on a supervisor's behalf may still verify / process it
 
 function httpError(statusCode, message) {
   const err = new Error(message);
@@ -21,10 +22,18 @@ function isRequestOwner(request, employee, ownerField = "requestedBy") {
   return request[ownerField] === employee.id || request.createdBy === employee.id;
 }
 
-/** Throws 403 when the owner/creator tries to verify, approve or process their own request. */
+/** True if the request is FOR this employee (the supervisor it was raised for / the sender). */
+function isRequestFor(request, employee, ownerField = "requestedBy") {
+  return request[ownerField] === employee.id;
+}
+
+/**
+ * Throws 403 when the supervisor a request is for tries to verify, approve or
+ * process it. Whoever created it on their behalf is allowed.
+ */
 function assertNotRequestOwner(request, employee, action, ownerField = "requestedBy") {
-  if (isRequestOwner(request, employee, ownerField)) {
-    throw httpError(403, `You cannot ${action} a request you created or that was raised for you`);
+  if (isRequestFor(request, employee, ownerField)) {
+    throw httpError(403, `You cannot ${action} your own request`);
   }
 }
 
@@ -86,6 +95,7 @@ module.exports = {
   creatorFlags,
   withCreatorFlags,
   isRequestOwner,
+  isRequestFor,
   assertNotRequestOwner,
   assertRequestOwner,
   resolveRequestOwner,

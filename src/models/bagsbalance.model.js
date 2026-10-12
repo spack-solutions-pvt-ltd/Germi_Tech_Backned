@@ -11,6 +11,7 @@ module.exports = (sequelize, DataTypes) => {
     static associate(models) {
       this.belongsTo(models.Employee, { foreignKey: "supervisorId", as: "supervisor" });
       this.belongsTo(models.AllotmentVillage, { foreignKey: "allotmentVillageId", as: "allotmentVillage" });
+      this.hasMany(models.LoadingRequestEntry, { foreignKey: "bagsBalanceId", as: "loadingEntries" });
     }
   }
 
@@ -23,7 +24,7 @@ module.exports = (sequelize, DataTypes) => {
       sharedInBags: { type: DataTypes.INTEGER, allowNull: false, defaultValue: 0 }, // incoming shared transfer -> Received
       returnedBags: { type: DataTypes.INTEGER, allowNull: false, defaultValue: 0 }, // return transfer -> Received
       sharedOutBags: { type: DataTypes.INTEGER, allowNull: false, defaultValue: 0 }, // outgoing shared transfer -> Received
-      usedBags: { type: DataTypes.INTEGER, allowNull: false, defaultValue: 0 }, // consumption — wired up later
+      usedBags: { type: DataTypes.INTEGER, allowNull: false, defaultValue: 0 }, // loading request -> Approved (LoadingRequestEntry.bagsBalanceId)
       availableBags: { type: DataTypes.INTEGER, allowNull: false, defaultValue: 0 },
     },
     {

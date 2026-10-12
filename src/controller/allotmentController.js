@@ -196,12 +196,14 @@ const getAllotmentVillageTable = async (req, res, next) => {
       season,
       year,
       supervisorId,
+      search
     } = req.query;
     const { page, limit, offset } = getPagination(req.query);
 
     const where = {};
     if (villageId) where.villageId = villageId;
     if (supervisorId) where.supervisorId = supervisorId;
+    if (search) where.allotmentVillageId = { [Op.like]: `%${search}%` };
 
     const allotmentWhere = {};
     if (companyId) allotmentWhere.companyId = companyId;

@@ -26,6 +26,7 @@ const {
   resolveRequestOwner,
   assertRequestOwner,
   isRequestOwner,
+  isRequestFor,
   myRequestsScope,
   creatorFlags,
 } = require("../utils/requestOwnership");
@@ -420,8 +421,9 @@ async function updateBagsRequest(req, res, next) {
 /** Who may perform a transition. Returns an error message, or null if allowed. */
 function authorizeTransition(request, toStatus, employee) {
   if (["in_process", "bags_sent"].includes(toStatus)) {
-    if (isRequestOwner(request, employee)) {
-      return "You cannot process a request you created or that was raised for you";
+    // The supervisor can't process their own request; an L1/L2 who raised it for them can.
+    if (isRequestFor(request, employee)) {
+      return "You cannot process your own request";
     }
     return isProcessor(employee)
       ? null

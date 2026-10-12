@@ -67,6 +67,9 @@ module.exports = (sequelize, DataTypes) => {
       cancelledBy: DataTypes.INTEGER,
       cancelledAt: DataTypes.DATE,
       cancellationReason: DataTypes.TEXT,
+      // When the rows' noOfBags were deducted from their allotments' bag
+      // stock (on approval). Null = not deducted yet; guards against doing it twice.
+      bagsDeductedAt: DataTypes.DATE,
     },
     {
       sequelize,

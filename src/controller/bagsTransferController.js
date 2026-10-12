@@ -31,6 +31,7 @@ const {
 } = require("../utils/bagsCommon");
 const {
   isRequestOwner,
+  isRequestFor,
   assertRequestOwner,
   resolveRequestOwner,
 } = require("../utils/requestOwnership");
@@ -176,6 +177,25 @@ async function getAllBagsTransfers(req, res, next) {
   const where = {};
   if (req.query.senderId) where.senderId = req.query.senderId;
   return listBagsTransfers(where, req, res, next);
+}
+
+/**
+ * GET /bag-transfers/company?page=&limit=&status=&search=&villageId=&senderId=
+ *                           &toCompanyType=germitech|seed_company&toCompanyId=
+ * Every transfer sent to a company (Germi Tech or a seed company) — stored
+ * as type "return". Same row shape as the other transfer lists.
+ */
+async function getCompanyBagsTransfers(req, res, next) {
+  const { toCompanyType, toCompanyId, senderId } = req.query;
+  if (toCompanyType && !["germitech", "seed_company"].includes(toCompanyType)) {
+    return error(res, 400, 'toCompanyType must be "germitech" or "seed_company"');
+  }
+  const where = { type: "return" };
+  if (toCompanyType) where.toCompanyType = toCompanyType;
+  if (toCompanyId) where.toCompanyId = toCompanyId;
+  if (senderId) where.senderId = senderId;
+  // The list's own ?type= filter must not override "company only".
+  return listBagsTransfers(where, { ...req, query: { ...req.query, type: undefined } }, res, next);
 }
 
 /** GET /bag-transfers/:id — details drawer, including status history */
@@ -526,7 +546,8 @@ function authorizeTransition(transfer, toStatus, employee) {
     transfer.type === "shared" ? transfer.toSupervisorId === employee.id : isProcessor(employee);
 
   if (["received", "not_received"].includes(toStatus)) {
-    if (isOwner) return "You cannot confirm a transfer you created or that was sent for you";
+    // The sender can't confirm their own transfer; an L1/L2 who sent it on their behalf can.
+    if (isRequestFor(transfer, employee, "senderId")) return "You cannot confirm your own transfer";
     if (isReceiver) return null;
     return transfer.type === "shared"
       ? "Only the receiving supervisor can confirm these bags"
@@ -627,6 +648,7 @@ async function updateBagsTransferStatus(req, res, next) {
 module.exports = {
   getMyBagsTransfers,
   getAllBagsTransfers,
+  getCompanyBagsTransfers,
   getBagsTransferById,
   getMyBagsTransferSummary,
   getBagsTransferSummary,

@@ -3,6 +3,7 @@ const { Router } = require("express");
 const {
   getMyBagsTransfers,
   getAllBagsTransfers,
+  getCompanyBagsTransfers,
   getBagsTransferById,
   getMyBagsTransferSummary,
   getBagsTransferSummary,
@@ -30,6 +31,7 @@ router.get("/my-transfers", getMyBagsTransfers); // ?direction=outgoing|incoming
 router.get("/my-summary", getMyBagsTransferSummary);
 router.get("/summary", getBagsTransferSummary);
 router.get("/", getAllBagsTransfers); // Verifications → Bags
+router.get("/company", getCompanyBagsTransfers); // transfers sent to a company (type "return")
 
 router.get("/:id", getBagsTransferById);
 router.post("/", createBagsTransfer); // Send bags (senderId? = on a supervisor's behalf)

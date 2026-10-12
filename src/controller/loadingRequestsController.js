@@ -11,6 +11,7 @@ const {
   LogisticsPartner,
   Payment,
   Employee,
+  BagsBalance,
 } = require("../models");
 const {
   getPagination,
@@ -18,7 +19,7 @@ const {
 } = require("../utils/pagination");
 const { generateId } = require("../utils/generateIds");
 const { success, error } = require("../utils/response");
-const { httpError } = require("../utils/bagsBalance");
+const { httpError, applyBagMovement, getLockedBalance } = require("../utils/bagsBalance");
 const {
   EMP_ATTRS,
   allotmentVillageInclude,
@@ -83,6 +84,8 @@ const ENTRY_INCLUDE = {
   include: [
     allotmentVillageInclude("allotmentVillage"),
     { model: Employee, as: "supervisor", attributes: EMP_ATTRS },
+    // Linked once approved: the allotment bag stock these bags were deducted from.
+    { model: BagsBalance, as: "bagsBalance", attributes: ["id", "availableBags", "usedBags"] },
   ],
 };
 
@@ -514,11 +517,58 @@ async function lockRequest(id, t) {
   return request;
 }
 
+/**
+ * Runs when a request becomes approved: each row's noOfBags are taken out of
+ * its allotment's bag stock — BagsBalance (row supervisor + allotment)
+ * usedBags += bags — and the row is linked to that balance (bagsBalanceId).
+ * Done once per request (bagsDeductedAt). Throws 409 if an allotment doesn't
+ * have enough bags, which rolls the whole approval back.
+ */
+async function deductLoadingBags(request, entries, t) {
+  if (request.bagsDeductedAt) return;
+
+  // One movement per supervisor + allotment, locked in a fixed order (no deadlocks).
+  const groups = new Map();
+  for (const e of entries) {
+    const key = `${e.supervisorId}:${e.allotmentVillageId}`;
+    const group = groups.get(key) || {
+      supervisorId: e.supervisorId,
+      allotmentVillageId: e.allotmentVillageId,
+      bags: 0,
+      entryIds: [],
+    };
+    group.bags += Number(e.noOfBags) || 0;
+    group.entryIds.push(e.id);
+    groups.set(key, group);
+  }
+  const ordered = [...groups.values()].sort(
+    (a, b) => a.supervisorId - b.supervisorId || a.allotmentVillageId - b.allotmentVillageId,
+  );
+
+  for (const g of ordered) {
+    const balance = await getLockedBalance(g.supervisorId, g.allotmentVillageId, t);
+    if (balance.availableBags < g.bags) {
+      const av = await AllotmentVillage.findByPk(g.allotmentVillageId, { attributes: ["allotmentVillageId"], transaction: t });
+      throw httpError(
+        409,
+        `Allotment ${av?.allotmentVillageId || g.allotmentVillageId}: this loading uses ${g.bags} bags but only ${balance.availableBags} are available`,
+      );
+    }
+    const updated = await applyBagMovement(
+      { supervisorId: g.supervisorId, allotmentVillageId: g.allotmentVillageId, deltas: { usedBags: g.bags } },
+      t,
+    );
+    await LoadingRequestEntry.update({ bagsBalanceId: updated.id }, { where: { id: g.entryIds }, transaction: t });
+  }
+  await request.update({ bagsDeductedAt: new Date() }, { transaction: t });
+}
+
 /** Recomputes approved / partially_approved after amounts change on a partially approved request. */
 async function syncApprovalStatus(request, t) {
   if (request.status !== "partially_approved") return;
   const entries = await LoadingRequestEntry.findAll({ where: { loadingRequestId: request.id }, transaction: t });
   const status = approvalStatus(request, calculateLoadingAmounts(request, entries));
+  if (status === "approved") await deductLoadingBags(request, entries, t);
   if (status && status !== request.status) await request.update({ status }, { transaction: t });
 }
 
@@ -681,11 +731,14 @@ async function createLoadingPayments(req, res, next) {
         created.push(type);
       }
 
+      const status = approvalStatus(request, amounts);
+      if (status === "approved") await deductLoadingBags(request, entries, t); // bags leave the allotments
+
       await request.update(
         {
           transportPaymentId: request.transportPaymentId,
           hamaliPaymentId: request.hamaliPaymentId,
-          status: approvalStatus(request, amounts),
+          status,
           approvedBy: request.approvedBy || req.employee.id,
           approvedAt: request.approvedAt || new Date(),
         },
