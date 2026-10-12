@@ -345,6 +345,8 @@ const getVillageAllotmentsByAllotment = async (req, res, next) => {
         "gpsPendingAcres",
         "status",
         "createdAt",
+        "villageId",
+        "subOrganizerId"
       ],
       include: [
         {
