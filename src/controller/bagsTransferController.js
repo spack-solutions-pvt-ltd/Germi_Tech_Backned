@@ -289,13 +289,18 @@ async function countByStatus(where) {
   return out;
 }
 
-/** GET /bag-transfers/my-summary — sent / incoming counts + bags currently with me */
+/**
+ * GET /bag-transfers/my-summary — sent / incoming counts + bags currently with me.
+ * Same scope as GET /my-transfers, so the cards match the list:
+ *   outgoing — transfers I sent OR raised on a supervisor's behalf
+ *   incoming — supervisor transfers where I'm the receiving supervisor
+ */
 async function getMyBagsTransferSummary(req, res, next) {
   try {
     const me = req.employee.id;
     const [outgoing, incoming, bagsWithMe] = await Promise.all([
-      countByStatus({ senderId: me }),
-      countByStatus({ toSupervisorId: me }),
+      countByStatus({ [Op.or]: [{ senderId: me }, { createdBy: me }] }),
+      countByStatus({ type: "shared", toSupervisorId: me }),
       BagsBalance.sum("availableBags", { where: { supervisorId: me } }),
     ]);
     return success(res, 200, "Bags transfer summary fetched successfully", {
