@@ -724,6 +724,8 @@ async function updateVillageAllotment(req, res, next) {
 
 /**
  * PATCH /allotment-villages/:villageAllotmentId/standing-acres   body: { standingAcres }
+ * Saving standing acres also sets this village's allottedAcres = standingAcres
+ * and gpsPendingAcres = 0, so every card / list that sums them stays in step.
  */
 async function updateStandingAcres(req, res, next) {
   try {
@@ -746,14 +748,49 @@ async function updateStandingAcres(req, res, next) {
     if (villageAllotment.status === "closed") {
       return error(res, 409, "This allotment is closed — standing acres can't be updated");
     }
-    const allottedAcres = Number(villageAllotment.allottedAcres) || 0;
-    if (standingAcres > allottedAcres) {
-      return error(res, 400, `standingAcres can't be more than the allotted ${allottedAcres} acres`);
+
+    // The standing acres become this village's allotted acres, so the
+    // allotment's villages together still can't exceed its required acres.
+    const allotment = await Allotment.findByPk(villageAllotment.allotmentId, {
+      attributes: ["id", "allotmentId", "reqAcres"],
+    });
+    const othersTotal =
+      Number(
+        await AllotmentVillage.sum("allottedAcres", {
+          where: { allotmentId: villageAllotment.allotmentId, id: { [Op.ne]: villageAllotment.id } },
+        }),
+      ) || 0;
+    const reqAcres = Number(allotment?.reqAcres) || 0;
+    if (othersTotal + standingAcres > reqAcres) {
+      return error(
+        res,
+        409,
+        `${standingAcres} acres would exceed the allotment's required ${reqAcres} acres (other villages already hold ${othersTotal})`,
+      );
     }
 
-    await villageAllotment.update({ standingAcres });
+    // Standing acres are what is actually on the ground: allotted acres follow
+    // them, and nothing is left pending GPS capture (allotted - standing = 0).
+    await villageAllotment.update({
+      standingAcres,
+      allottedAcres: standingAcres,
+      gpsPendingAcres: 0,
+    });
 
-    return success(res, 200, "Standing acres updated successfully");
+    return success(res, 200, "Standing acres updated successfully", {
+      data: {
+        id: villageAllotment.id,
+        allotmentVillageId: villageAllotment.allotmentVillageId,
+        allotmentId: villageAllotment.allotmentId,
+        allottedAcres: standingAcres,
+        standingAcres,
+        gpsPendingAcres: 0,
+        // allotment-level totals after this change
+        reqAcres,
+        totalAllottedAcres: othersTotal + standingAcres,
+        balanceAcres: reqAcres - (othersTotal + standingAcres),
+      },
+    });
   } catch (err) {
     next(err);
   }
