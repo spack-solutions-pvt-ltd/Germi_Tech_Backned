@@ -4,6 +4,7 @@ const {
   getMyBagsTransfers,
   getAllBagsTransfers,
   getCompanyBagsTransfers,
+  getCompanyBagsTransferSummary,
   getBagsTransferById,
   getMyBagsTransferSummary,
   getBagsTransferSummary,
@@ -29,9 +30,9 @@ router.get("/supervisors/:supervisorId/allotments", getSupervisorAllotments);
 // Lists & summary
 router.get("/my-transfers", getMyBagsTransfers); // ?direction=outgoing|incoming
 router.get("/my-summary", getMyBagsTransferSummary);
-router.get("/summary", getBagsTransferSummary);
 router.get("/", getAllBagsTransfers); // Verifications → Bags
 router.get("/company", getCompanyBagsTransfers); // transfers sent to a company (type "return")
+router.get("/company/summary", getCompanyBagsTransferSummary); // KPI cards for the company transfers page
 
 router.get("/:id", getBagsTransferById);
 router.post("/", createBagsTransfer); // Send bags (senderId? = on a supervisor's behalf)

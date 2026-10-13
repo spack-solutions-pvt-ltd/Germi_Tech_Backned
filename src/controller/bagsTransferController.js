@@ -186,16 +186,69 @@ async function getAllBagsTransfers(req, res, next) {
  * as type "return". Same row shape as the other transfer lists.
  */
 async function getCompanyBagsTransfers(req, res, next) {
-  const { toCompanyType, toCompanyId, senderId } = req.query;
+  try {
+    const where = companyTransferWhere(req.query);
+    // The list's own ?type= filter must not override "company only".
+    return listBagsTransfers(where, { ...req, query: { ...req.query, type: undefined } }, res, next);
+  } catch (err) {
+    next(err);
+  }
+}
+
+/** where for transfers sent to a company, from ?toCompanyType=&toCompanyId=&senderId=. Throws 400 on a bad type. */
+function companyTransferWhere({ toCompanyType, toCompanyId, senderId }) {
   if (toCompanyType && !["germitech", "seed_company"].includes(toCompanyType)) {
-    return error(res, 400, 'toCompanyType must be "germitech" or "seed_company"');
+    throw httpError(400, 'toCompanyType must be "germitech" or "seed_company"');
   }
   const where = { type: "return" };
   if (toCompanyType) where.toCompanyType = toCompanyType;
   if (toCompanyId) where.toCompanyId = toCompanyId;
   if (senderId) where.senderId = senderId;
-  // The list's own ?type= filter must not override "company only".
-  return listBagsTransfers(where, { ...req, query: { ...req.query, type: undefined } }, res, next);
+  return where;
+}
+
+/**
+ * GET /bag-transfers/company/summary?toCompanyType=&toCompanyId=&senderId=
+ * KPI cards for the company transfers page (same filters as the list).
+ * Each card: { count, bags } — number of transfers and bags in them.
+ *   total / pending / received / notReceived / cancelled
+ *   toGermitech / toSeedCompanies — split by destination
+ */
+async function getCompanyBagsTransferSummary(req, res, next) {
+  try {
+    const where = companyTransferWhere(req.query);
+    const rows = await BagsTransfer.findAll({
+      where,
+      attributes: ["status", "toCompanyType", [fn("COUNT", col("id")), "count"], [fn("SUM", col("bags")), "bags"]],
+      group: ["status", "toCompanyType"],
+      raw: true,
+    });
+
+    const card = () => ({ count: 0, bags: 0 });
+    const data = {
+      total: card(),
+      pending: card(),
+      received: card(),
+      notReceived: card(),
+      cancelled: card(),
+      toGermitech: card(),
+      toSeedCompanies: card(),
+    };
+    const statusKey = { pending: "pending", received: "received", not_received: "notReceived", cancelled: "cancelled" };
+    const add = (target, row) => {
+      target.count += Number(row.count);
+      target.bags += Number(row.bags) || 0;
+    };
+    for (const row of rows) {
+      add(data.total, row);
+      if (statusKey[row.status]) add(data[statusKey[row.status]], row);
+      add(row.toCompanyType === "germitech" ? data.toGermitech : data.toSeedCompanies, row);
+    }
+
+    return success(res, 200, "Company bags transfer summary fetched successfully", { data });
+  } catch (err) {
+    next(err);
+  }
 }
 
 /** GET /bag-transfers/:id — details drawer, including status history */
@@ -244,21 +297,6 @@ async function getMyBagsTransferSummary(req, res, next) {
     ]);
     return success(res, 200, "Bags transfer summary fetched successfully", {
       data: { outgoing, incoming, bagsWithMe: bagsWithMe || 0 },
-    });
-  } catch (err) {
-    next(err);
-  }
-}
-
-/** GET /bag-transfers/summary — Verifications cards */
-async function getBagsTransferSummary(req, res, next) {
-  try {
-    const [returns, shared] = await Promise.all([
-      countByStatus({ type: "return" }),
-      countByStatus({ type: "shared" }),
-    ]);
-    return success(res, 200, "Bags transfer summary fetched successfully", {
-      data: { return: returns, shared },
     });
   } catch (err) {
     next(err);
@@ -649,9 +687,9 @@ module.exports = {
   getMyBagsTransfers,
   getAllBagsTransfers,
   getCompanyBagsTransfers,
+  getCompanyBagsTransferSummary,
   getBagsTransferById,
   getMyBagsTransferSummary,
-  getBagsTransferSummary,
   getMyAllotmentsWithBags,
   getBagsBalance,
   getDestinationCompanies,

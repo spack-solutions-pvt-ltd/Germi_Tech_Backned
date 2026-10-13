@@ -191,12 +191,12 @@ const getAllAllotments = async (req, res, next) => {
 const getAllotmentVillageTable = async (req, res, next) => {
   try {
     const {
-      villageId,
+      village: villageId,
       company: companyId,
       season,
       year,
-      supervisorId,
-      search
+      supervisor: supervisorId,
+      search,
     } = req.query;
     const { page, limit, offset } = getPagination(req.query);
 
@@ -257,9 +257,7 @@ const getAllotmentById = async (req, res, next) => {
     if (!id) return error(res, 400, "id is required");
 
     const allotment = await Allotment.findByPk(id, {
-      include: [
-        ...ALLOTMENT_INCLUDES
-      ],
+      include: [...ALLOTMENT_INCLUDES],
     });
 
     if (!allotment) return error(res, 404, "Allotment not found");
@@ -346,7 +344,7 @@ const getVillageAllotmentsByAllotment = async (req, res, next) => {
         "status",
         "createdAt",
         "villageId",
-        "subOrganizerId"
+        "subOrganizerId",
       ],
       include: [
         {
@@ -664,7 +662,7 @@ async function updateVillageAllotment(req, res, next) {
       gpsPendingAcres,
       supervisorId,
       subOrganizerId,
-      villageId
+      villageId,
     } = req.body;
 
     // "opened" / "open" / "closed". Closed = hidden from the supervisor
@@ -719,6 +717,43 @@ async function updateVillageAllotment(req, res, next) {
     return success(res, 200, "Village allotment updated successfully", {
       data: villageAllotment,
     });
+  } catch (err) {
+    next(err);
+  }
+}
+
+/**
+ * PATCH /allotment-villages/:villageAllotmentId/standing-acres   body: { standingAcres }
+ */
+async function updateStandingAcres(req, res, next) {
+  try {
+    const { villageAllotmentId } = req.params;
+    if (!villageAllotmentId) return error(res, 400, "villageAllotmentId is required");
+
+    const raw = req.body?.standingAcres;
+    const standingAcres = Number(raw);
+    if (raw === undefined || raw === null || raw === "" || !Number.isFinite(standingAcres) || standingAcres < 0) {
+      return error(res, 400, "standingAcres must be a number, 0 or more");
+    }
+
+    const villageAllotment = await AllotmentVillage.findByPk(villageAllotmentId);
+    if (!villageAllotment) return error(res, 404, "Village allotment not found");
+
+    const isAssigned = villageAllotment.supervisorId === req.employee.id;
+    if (!isAssigned && !["L1", "L2"].includes(req.employee.level)) {
+      return error(res, 403, "You can only update the standing acres of an allotment assigned to you");
+    }
+    if (villageAllotment.status === "closed") {
+      return error(res, 409, "This allotment is closed — standing acres can't be updated");
+    }
+    const allottedAcres = Number(villageAllotment.allottedAcres) || 0;
+    if (standingAcres > allottedAcres) {
+      return error(res, 400, `standingAcres can't be more than the allotted ${allottedAcres} acres`);
+    }
+
+    await villageAllotment.update({ standingAcres });
+
+    return success(res, 200, "Standing acres updated successfully");
   } catch (err) {
     next(err);
   }
@@ -891,6 +926,7 @@ const getAllotmentsSummary = async (req, res, next) => {
 };
 
 module.exports = {
+  updateStandingAcres,
   getVillageAllotmentsByAllotment,
   getAllotmentsSummary,
   getAllAllotments,

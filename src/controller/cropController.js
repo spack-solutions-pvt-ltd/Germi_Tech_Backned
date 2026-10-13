@@ -6,11 +6,19 @@ const {
   createCropSchema,
   updateCropSchema,
 } = require("../validators/cropValidator");
+const { Op } = require("sequelize");
 
 async function getAllCrops(req, res, next) {
   try {
-    const { page, limit } = req.query;
+    const { page, limit, search } = req.query;
     const where = statusFilter(req.query.status); // ?status=Active|Inactive
+    if (search) {
+      const term = `%${search.trim()}%`;
+      where[Op.or] = [
+        { name: { [Op.like]: term } },
+        { cropId: { [Op.like]: term } },
+      ];
+    }
 
     // No pagination parameters → return all crops as { id, cropId, name }
     if (page === undefined && limit === undefined) {

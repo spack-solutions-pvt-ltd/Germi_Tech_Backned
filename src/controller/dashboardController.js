@@ -22,7 +22,7 @@ const {
 } = require("../models");
 const { success, error } = require("../utils/response");
 const { allotmentVillageInclude, EMP_ATTRS } = require("../utils/bagsCommon");
-const { allotmentScope, resolveSeason } = require("../utils/periods");
+const { allotmentScope, seasonFilter } = require("../utils/periods");
 const { OPEN_ALLOTMENT } = require("../utils/allotmentStatus");
 const { getPagination, buildPaginatedResponse } = require("../utils/pagination");
 
@@ -359,15 +359,20 @@ async function rowingAcres(allotmentVillageIds) {
 }
 
 /**
- * Which allotments an L3 supervisor sees on the dashboard: their village
- * allotments in THIS season (?season=&year= to change) whose village allotment
- * is open — a closed one is never shown to the supervisor. Shared by the cards
- * and the list, so their numbers always match.
+ * Which allotments an L3 supervisor sees on the dashboard: every village
+ * allotment assigned to them that is open — a closed one is never shown.
+ * Optional ?season=Kharif|Rabi and/or ?year=25-26 narrow it to one season /
+ * crop year. Shared by the cards and the list, so their numbers always match.
  */
 function l3AllotmentQuery(req) {
-  const season = resolveSeason(req.query);
+  // null when neither season nor year was sent -> no season filter at all.
+  const season = seasonFilter(req.query);
+  const allotmentWhere = {
+    ...(season?.season && { season: season.season }),
+    ...(season && { year: season.cropYear }),
+  };
   return {
-    label: `${season.label} · open`,
+    label: `${season ? season.label : "All seasons"} · open`,
     options: {
       where: { supervisorId: req.employee.id, ...OPEN_ALLOTMENT },
       include: [
@@ -376,7 +381,8 @@ function l3AllotmentQuery(req) {
           model: Allotment,
           as: "allotment",
           attributes: ["id", "allotmentId", "season", "year", "status"],
-          where: { season: season.season, year: season.cropYear },
+          where: allotmentWhere,
+          required: true,
           include: {
             model: CompanyCrop,
             as: "companyCrop",

@@ -29,7 +29,6 @@ const getAllTaskTypes = async (req, res, next) => {
     if (!hasPagination(req.query)) {
       const data = await TaskType.findAll({
         where,
-        attributes: ["id", "taskTypeId", "name"],
         order: [["createdAt", "DESC"]],
       });
       return success(res, 200, "Task types fetched successfully", { data });

@@ -26,7 +26,7 @@ const bagTransferRoutes = require("./bagTransferRoutes");
 const paymentRoutes = require("./paymentRoutes");
 const dashboardRoutes = require("./dashboardRoutes");
 const { getAllStates } = require("../controller/stateController");  
-const { getAllNames, getAllotmentVillagesBySupervisor } = require("../controller/allotmentController");
+const { getAllNames, getAllotmentVillagesBySupervisor, updateStandingAcres } = require("../controller/allotmentController");
 
 router.use(indexRoutes.auth, authRoutes);
 // Emp Management
@@ -61,5 +61,7 @@ router.get(indexRoutes.allFields, authenticate, getAllNames);
 // Allotment-villages of a supervisor: ?supervisorId= or /:supervisorId (default: logged-in user)
 router.get(indexRoutes.allotmentVillages, authenticate, getAllotmentVillagesBySupervisor);
 router.get(`${indexRoutes.allotmentVillages}/:supervisorId`, authenticate, getAllotmentVillagesBySupervisor);
+// Assigned supervisor records standing acres: body { standingAcres }
+router.patch(`${indexRoutes.allotmentVillages}/:villageAllotmentId/standing-acres`, authenticate, updateStandingAcres);
 
 module.exports = router;
