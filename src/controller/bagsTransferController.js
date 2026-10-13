@@ -49,8 +49,11 @@ const STATUS_FLOW = {
   received: ["not_received", "cancelled"],
 };
 
-// Statuses whose bags are still committed from the sender's allotment.
-const OPEN_STATUSES = ["pending", "not_received"];
+// Statuses whose bags are still committed (reserved) from the sender's
+// allotment — ONLY a pending transfer. Do not add "not_received" here: a
+// transfer marked not received must release its bags back to the sender,
+// otherwise the sender's sendable count never resets.
+const OPEN_STATUSES = ["pending"];
 
 const HEADER_INCLUDES = [
   { model: Employee, as: "sender", attributes: EMP_ATTRS },
