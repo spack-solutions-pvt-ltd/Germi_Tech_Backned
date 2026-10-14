@@ -191,7 +191,7 @@ const getAllAllotments = async (req, res, next) => {
 const getAllotmentVillageTable = async (req, res, next) => {
   try {
     const {
-      village: villageId,
+      villageId,
       company: companyId,
       season,
       year,
@@ -730,23 +730,40 @@ async function updateVillageAllotment(req, res, next) {
 async function updateStandingAcres(req, res, next) {
   try {
     const { villageAllotmentId } = req.params;
-    if (!villageAllotmentId) return error(res, 400, "villageAllotmentId is required");
+    if (!villageAllotmentId)
+      return error(res, 400, "villageAllotmentId is required");
 
     const raw = req.body?.standingAcres;
     const standingAcres = Number(raw);
-    if (raw === undefined || raw === null || raw === "" || !Number.isFinite(standingAcres) || standingAcres < 0) {
+    if (
+      raw === undefined ||
+      raw === null ||
+      raw === "" ||
+      !Number.isFinite(standingAcres) ||
+      standingAcres < 0
+    ) {
       return error(res, 400, "standingAcres must be a number, 0 or more");
     }
 
-    const villageAllotment = await AllotmentVillage.findByPk(villageAllotmentId);
-    if (!villageAllotment) return error(res, 404, "Village allotment not found");
+    const villageAllotment =
+      await AllotmentVillage.findByPk(villageAllotmentId);
+    if (!villageAllotment)
+      return error(res, 404, "Village allotment not found");
 
     const isAssigned = villageAllotment.supervisorId === req.employee.id;
     if (!isAssigned && !["L1", "L2"].includes(req.employee.level)) {
-      return error(res, 403, "You can only update the standing acres of an allotment assigned to you");
+      return error(
+        res,
+        403,
+        "You can only update the standing acres of an allotment assigned to you",
+      );
     }
     if (villageAllotment.status === "closed") {
-      return error(res, 409, "This allotment is closed — standing acres can't be updated");
+      return error(
+        res,
+        409,
+        "This allotment is closed — standing acres can't be updated",
+      );
     }
 
     // The standing acres become this village's allotted acres, so the
@@ -757,7 +774,10 @@ async function updateStandingAcres(req, res, next) {
     const othersTotal =
       Number(
         await AllotmentVillage.sum("allottedAcres", {
-          where: { allotmentId: villageAllotment.allotmentId, id: { [Op.ne]: villageAllotment.id } },
+          where: {
+            allotmentId: villageAllotment.allotmentId,
+            id: { [Op.ne]: villageAllotment.id },
+          },
         }),
       ) || 0;
     const reqAcres = Number(allotment?.reqAcres) || 0;
