@@ -2,7 +2,7 @@
 const bcrypt = require("bcrypt");
 const jwt = require("jsonwebtoken");
 const crypto = require("crypto");
-const { Employee, Role, Permission } = require("../models");
+const { Employee, Role, Permission, RefreshToken } = require("../models");
 const { sendMail } = require("../utils/mailer");
 const { generateOtp } = require("../utils/generateIds");
 const { otpEmailTemplate } = require("../templates/otpEmail");
@@ -417,8 +417,26 @@ const getUserDetails = async (req, res, next) => {
     next(err);
   }
 };
+/**
+ * POST /api/auth/logout   body: { refreshToken }
+ */
+const logout = async (req, res, next) => {
+  try {
+    const { refreshToken: incomingToken } = req.body || {};
+    if (!incomingToken) return error(res, 400, "refreshToken is required");
+
+    const deleted = await RefreshToken.destroy({ where: { tokenHash: hashToken(incomingToken) } });
+    if (!deleted) return error(res, 404, "Refresh token not found or already logged out");
+
+    return success(res, 200, "Logged out successfully");
+  } catch (err) {
+    next(err);
+  }
+};
+
 module.exports = {
   login,
+  logout,
   refreshToken: refreshTokenHandler,
   forgotPassword,
   verifyOtp,

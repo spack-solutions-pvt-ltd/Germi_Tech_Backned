@@ -6,6 +6,8 @@ const authRoutes = {
   resetPassword: "/reset-password",
   getDetails: "/me",
   changePassword: "/change-password",
+  refreshToken:"/refresh-token",
+  logout: "/logout",
 };
 
 const indexRoutes = {
