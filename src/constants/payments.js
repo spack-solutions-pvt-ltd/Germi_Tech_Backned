@@ -15,7 +15,6 @@ const PAYMENT_MODES = ["bank", "upi", "cash"];
 
 // Levels that can open the Payments page / process a payment.
 const PAYMENT_VIEW_LEVELS = ["L1", "L2"];
-const PAYMENT_PROCESS_LEVELS = ["L2","L1"];
 
 /** Types that should be treated as the same bucket when filtering ("supervisor" also matches legacy "expense"). */
 const typeFilterValues = (type) => (type === "supervisor" ? ["supervisor", "expense"] : [type]);
@@ -25,6 +24,5 @@ module.exports = {
   PAYMENT_STATUSES,
   PAYMENT_MODES,
   PAYMENT_VIEW_LEVELS,
-  PAYMENT_PROCESS_LEVELS,
   typeFilterValues,
 };

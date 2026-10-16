@@ -1,5 +1,6 @@
 "use strict";
 const { Router } = require("express");
+const { bagTransferRoutes } = require("../constants/routes");
 const {
   getMyBagsTransfers,
   getAllBagsTransfers,
@@ -21,22 +22,22 @@ const {
 const router = Router();
 
 // Send Bags drawer dropdowns
-router.get("/my-allotments", getMyAllotmentsWithBags); // allotments + "Bags with him"
-router.get("/balance/:allotmentVillageId", getBagsBalance);
-router.get("/companies", getDestinationCompanies);
-router.get("/supervisors", getSupervisors);
-router.get("/supervisors/:supervisorId/allotments", getSupervisorAllotments);
+router.get(bagTransferRoutes.myAllotments, getMyAllotmentsWithBags); // allotments + "Bags with him"
+router.get(bagTransferRoutes.balanceByAllotmentVillageId, getBagsBalance);
+router.get(bagTransferRoutes.companies, getDestinationCompanies);
+router.get(bagTransferRoutes.supervisors, getSupervisors);
+router.get(bagTransferRoutes.supervisorsAllotmentsBySupervisorId, getSupervisorAllotments);
 
 // Lists & summary
-router.get("/my-transfers", getMyBagsTransfers); // ?direction=outgoing|incoming
-router.get("/my-summary", getMyBagsTransferSummary);
-router.get("/", getAllBagsTransfers); // Verifications → Bags
-router.get("/company", getCompanyBagsTransfers); // transfers sent to a company (type "return")
-router.get("/company/summary", getCompanyBagsTransferSummary); // KPI cards for the company transfers page
+router.get(bagTransferRoutes.myTransfers, getMyBagsTransfers); // ?direction=outgoing|incoming
+router.get(bagTransferRoutes.mySummary, getMyBagsTransferSummary);
+router.get(bagTransferRoutes.root, getAllBagsTransfers); // Verifications → Bags
+router.get(bagTransferRoutes.company, getCompanyBagsTransfers); // transfers sent to a company (type "return")
+router.get(bagTransferRoutes.companySummary, getCompanyBagsTransferSummary); // KPI cards for the company transfers page
 
-router.get("/:id", getBagsTransferById);
-router.post("/", createBagsTransfer); // Send bags (senderId? = on a supervisor's behalf)
-router.put("/:id", updateBagsTransfer); // sender / creator, Pending only
-router.patch("/:id/status", updateBagsTransferStatus); // received | not_received | cancelled
+router.get(bagTransferRoutes.byId, getBagsTransferById);
+router.post(bagTransferRoutes.root, createBagsTransfer); // Send bags (senderId? = on a supervisor's behalf)
+router.put(bagTransferRoutes.byId, updateBagsTransfer); // sender / creator, Pending only
+router.patch(bagTransferRoutes.statusById, updateBagsTransferStatus); // received | not_received | cancelled
 
 module.exports = router;

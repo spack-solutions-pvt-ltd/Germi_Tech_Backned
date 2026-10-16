@@ -19,6 +19,7 @@ const {
 } = require("../utils/pagination");
 const { success, error } = require("../utils/response");
 const { generateId } = require("../utils/generateIds");
+const { seedCompanyMessages } = require("../constants/message/seedCompanyMessages");
 
 /** GET /api/seed-companies?search=agro&page=1&limit=20 */
 const getAllSeedCompanies = async (req, res, next) => {
@@ -42,7 +43,7 @@ const getAllSeedCompanies = async (req, res, next) => {
         attributes: ["id", "companyId", "name"],
         order: [["createdAt", "DESC"]],
       });
-      return success(res, 200, "Seed companies fetched successfully", { data });
+      return success(res, 200, seedCompanyMessages.seedCompaniesFetchedSuccessfully, { data });
     }
 
     const result = await SeedCompany.findAndCountAll({
@@ -67,7 +68,7 @@ const getAllSeedCompanies = async (req, res, next) => {
     return success(
       res,
       200,
-      "Seed companies fetched successfully",
+      seedCompanyMessages.seedCompaniesFetchedSuccessfully,
       buildPaginatedResponse(result, page, limit),
     );
   } catch (err) {
@@ -80,7 +81,7 @@ const getSeedCompanyById = async (req, res, next) => {
   try {
     const { seedCompanyId } = req.params;
     if (!seedCompanyId) {
-      return error(res, 400, "seedCompanyId is required");
+      return error(res, 400, seedCompanyMessages.seedCompanyIdIsRequired);
     }
 
     const company = await SeedCompany.findByPk(seedCompanyId, {
@@ -105,7 +106,7 @@ const getSeedCompanyById = async (req, res, next) => {
     });
 
     if (!company) {
-      return error(res, 404, "Seed company not found");
+      return error(res, 404, seedCompanyMessages.seedCompanyNotFound);
     }
 
     // Requirement = required acres of this company's allotments (open
@@ -121,7 +122,7 @@ const getSeedCompanyById = async (req, res, next) => {
       Allotment.count({ where: allotmentWhere }),
     ]);
 
-    return success(res, 200, "Seed company fetched successfully", {
+    return success(res, 200, seedCompanyMessages.seedCompanyFetchedSuccessfully, {
       data: {
         ...company.toJSON(),
         requirementAcres: Number(requirementAcres) || 0,
@@ -169,7 +170,7 @@ const createSeedCompany = async (req, res, next) => {
     const companyId = generateId("SC", company?.id);
     await company.update({ companyId });
 
-    return success(res, 201, "Seed company created successfully", {
+    return success(res, 201, seedCompanyMessages.seedCompanyCreatedSuccessfully, {
       data: company,
     });
   } catch (err) {
@@ -181,10 +182,10 @@ const createSeedCompany = async (req, res, next) => {
 const updateSeedCompany = async (req, res, next) => {
   try {
     const { seedCompanyId } = req.params;
-    if (!seedCompanyId) return error(res, 400, "seedCompanyId is required");
+    if (!seedCompanyId) return error(res, 400, seedCompanyMessages.seedCompanyIdIsRequired);
 
     const company = await SeedCompany.findByPk(seedCompanyId);
-    if (!company) return error(res, 404, "Seed company not found");
+    if (!company) return error(res, 404, seedCompanyMessages.seedCompanyNotFound);
 
     const {
       name,
@@ -212,7 +213,7 @@ const updateSeedCompany = async (req, res, next) => {
       status,
     });
 
-    return success(res, 200, "Seed company updated successfully", {
+    return success(res, 200, seedCompanyMessages.seedCompanyUpdatedSuccessfully, {
       data: company,
     });
   } catch (err) {
@@ -235,7 +236,7 @@ const getSeedCompanySummary = async (req, res, next) => {
       Allotment.sum("reqAcres", { where: { season: season.season, year: season.cropYear } }),
     ]);
 
-    return success(res, 200, "Seed company summary fetched successfully", {
+    return success(res, 200, seedCompanyMessages.seedCompanySummaryFetchedSuccessfully, {
       data: {
         totalCompanies,
         activeCompanies: totalCompanies - inactiveCompanies,

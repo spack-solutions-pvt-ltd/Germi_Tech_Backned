@@ -27,6 +27,7 @@ const {
   paymentSeasonWhere,
   toDateOnly,
 } = require("../utils/periods");
+const { labourGroupMessages } = require("../constants/message/labourGroupMessages");
 
 /** GET /api/labor-groups */
 async function getAllLaborGroups(req, res, next) {
@@ -50,7 +51,7 @@ async function getAllLaborGroups(req, res, next) {
         attributes: ["id", "laborGroupId", "name"],
         order: [["createdAt", "DESC"]],
       });
-      return success(res, 200, "Labor groups fetched successfully", { data });
+      return success(res, 200, labourGroupMessages.laborGroupsFetchedSuccessfully, { data });
     }
 
     const result = await LaborGroup.findAndCountAll({
@@ -76,7 +77,7 @@ async function getAllLaborGroups(req, res, next) {
     return success(
       res,
       200,
-      "Labor groups fetched successfully",
+      labourGroupMessages.laborGroupsFetchedSuccessfully,
       buildPaginatedResponse(result, page, limit),
     );
   } catch (err) {
@@ -88,7 +89,7 @@ async function getAllLaborGroups(req, res, next) {
 async function getLaborGroupById(req, res, next) {
   try {
     const { id } = req.params;
-    if (!id) return error(res, 400, "id is required");
+    if (!id) return error(res, 400, labourGroupMessages.idIsRequired);
 
     const laborGroup = await LaborGroup.findByPk(id, {
       include: [
@@ -101,11 +102,11 @@ async function getLaborGroupById(req, res, next) {
       ],
     });
 
-    if (!laborGroup) return error(res, 404, "Labor group not found");
+    if (!laborGroup) return error(res, 404, labourGroupMessages.laborGroupNotFound);
 
     const totals = await getGroupPaymentTotals(laborGroup.id, resolveSeason(req.query));
 
-    return success(res, 200, "Labor group fetched successfully", {
+    return success(res, 200, labourGroupMessages.laborGroupFetchedSuccessfully, {
       data: { ...laborGroup.toJSON(), ...totals },
     });
   } catch (err) {
@@ -124,12 +125,12 @@ async function createLaborGroup(req, res, next) {
 
     if (!name) {
       await transaction.rollback();
-      return error(res, 400, "name is required");
+      return error(res, 400, labourGroupMessages.nameIsRequired);
     }
 
     if (!contactNumber) {
       await transaction.rollback();
-      return error(res, 400, "contactNumber is required");
+      return error(res, 400, labourGroupMessages.contactNumberIsRequired);
     }
 
     // Validate crop rates
@@ -137,7 +138,7 @@ async function createLaborGroup(req, res, next) {
       for (const rate of cropRates) {
         if (!rate.cropId) {
           await transaction.rollback();
-          return error(res, 400, "cropId is required in every cropRates entry");
+          return error(res, 400, labourGroupMessages.cropIdIsRequiredInEveryCroprates);
         }
 
         if (rate.pricePerPerson === undefined) {
@@ -145,7 +146,7 @@ async function createLaborGroup(req, res, next) {
           return error(
             res,
             400,
-            "pricePerPerson is required in every cropRates entry",
+            labourGroupMessages.pricePerPersonIsRequiredInEveryCroprates,
           );
         }
       }
@@ -161,7 +162,7 @@ async function createLaborGroup(req, res, next) {
         return error(
           res,
           400,
-          "Same crop cannot be added more than once to the same labor group",
+          labourGroupMessages.sameCropCannotBeAddedMore,
         );
       }
 
@@ -179,7 +180,7 @@ async function createLaborGroup(req, res, next) {
         return error(
           res,
           404,
-          "One or more cropId values in cropRates do not exist",
+          labourGroupMessages.oneOrMoreCropidValuesIn,
         );
       }
     }
@@ -244,7 +245,7 @@ async function createLaborGroup(req, res, next) {
     // Everything succeeded
     await transaction.commit();
 
-    return success(res, 201, "Labor group created successfully", {
+    return success(res, 201, labourGroupMessages.laborGroupCreatedSuccessfully, {
       data: created,
     });
   } catch (err) {
@@ -261,22 +262,22 @@ async function createLaborGroup(req, res, next) {
 async function updateLaborGroup(req, res, next) {
   try {
     const { id } = req.params;
-    if (!id) return error(res, 400, "id is required");
+    if (!id) return error(res, 400, labourGroupMessages.idIsRequired);
 
     const laborGroup = await LaborGroup.findByPk(id);
-    if (!laborGroup) return error(res, 404, "Labor group not found");
+    if (!laborGroup) return error(res, 404, labourGroupMessages.laborGroupNotFound);
 
     const { name, contactNumber, upiNumber, status, cropRates } = req.body;
 
     if (cropRates !== undefined) {
       for (const rate of cropRates) {
         if (!rate.cropId)
-          return error(res, 400, "cropId is required in every cropRates entry");
+          return error(res, 400, labourGroupMessages.cropIdIsRequiredInEveryCroprates);
         if (rate.pricePerPerson === undefined) {
           return error(
             res,
             400,
-            "pricePerPerson is required in every cropRates entry",
+            labourGroupMessages.pricePerPersonIsRequiredInEveryCroprates,
           );
         }
       }
@@ -287,7 +288,7 @@ async function updateLaborGroup(req, res, next) {
         return error(
           res,
           404,
-          "One or more cropId values in cropRates do not exist",
+          labourGroupMessages.oneOrMoreCropidValuesIn,
         );
       }
 
@@ -320,7 +321,7 @@ async function updateLaborGroup(req, res, next) {
       ],
     });
 
-    return success(res, 200, "Labor group updated successfully", {
+    return success(res, 200, labourGroupMessages.laborGroupUpdatedSuccessfully, {
       data: updated,
     });
   } catch (err) {
@@ -375,7 +376,7 @@ async function getLaborGroupSummary(req, res, next) {
       sumPayments({ ...LABOUR_PAYMENT_WHERE, status: "processed", ...inSeason }),
     ]);
 
-    return success(res, 200, "Labour group summary fetched successfully", {
+    return success(res, 200, labourGroupMessages.labourGroupSummaryFetchedSuccessfully, {
       data: {
         totalGroups,
         addedThisMonth,
@@ -418,7 +419,7 @@ async function getLaborGroupPaymentById(req, res, next) {
         { model: Employee, as: "processor", attributes: PERSON_ATTRS },
       ],
     });
-    if (!payment) return error(res, 404, "Payment not found for this labour group");
+    if (!payment) return error(res, 404, labourGroupMessages.paymentNotFoundForThisLabour);
 
     const request =
       payment.sourceRequestType === "labour_request"
@@ -437,7 +438,7 @@ async function getLaborGroupPaymentById(req, res, next) {
     const cost = request ? await calculateLabourCost(request) : null;
     const prices = [...new Set((cost?.cropCosts || []).map((c) => c.pricePerPerson).filter((p) => p !== null))];
 
-    return success(res, 200, "Labour group payment fetched successfully", {
+    return success(res, 200, labourGroupMessages.labourGroupPaymentFetchedSuccessfully, {
       data: {
         id: payment.id,
         paymentCode: payment.paymentCode,
@@ -474,7 +475,7 @@ async function getLaborGroupPaymentById(req, res, next) {
 async function getLaborGroupPayments(req, res, next) {
   try {
     const group = await LaborGroup.findByPk(req.params.id, { attributes: ["id"] });
-    if (!group) return error(res, 404, "Labour group not found");
+    if (!group) return error(res, 404, labourGroupMessages.labourGroupNotFound);
 
     const where = { recipientType: "labor_group", recipientId: group.id, ...paymentSeasonWhere(seasonFilter(req.query)) };
     if (["pending", "processed"].includes(req.query.status)) where.status = req.query.status;
@@ -528,7 +529,7 @@ async function getLaborGroupPayments(req, res, next) {
     });
     response.totals = totals;
 
-    return success(res, 200, "Labour group payments fetched successfully", response);
+    return success(res, 200, labourGroupMessages.labourGroupPaymentsFetchedSuccessfully, response);
   } catch (err) {
     next(err);
   }

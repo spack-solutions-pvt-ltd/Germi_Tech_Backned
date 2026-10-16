@@ -3,6 +3,7 @@ const { Employee, Role, Permission } = require("../models");
 const { PERMISSION_MODULES } = require("../constants/permissions");
 const { buildPermissionMap } = require("../utils/permissionMap");
 const { success, error } = require("../utils/response");
+const { permissionMessages } = require("../constants/message/permissionMessages");
 
 function humanizeModule(moduleKey) {
   return moduleKey
@@ -42,7 +43,7 @@ async function getAllPermissions(req, res, next) {
       return acc;
     }, {});
 
-    return success(res, 200, "Permissions fetched successfully", {
+    return success(res, 200, permissionMessages.permissionsFetchedSuccessfully, {
       data: Object.values(grouped),
     });
   } catch (err) {
@@ -56,7 +57,7 @@ async function getAllPermissions(req, res, next) {
  */
 async function getMyPermissions(req, res, next) {
   try {
-    if (!req.employee) return error(res, 401, "Authentication required");
+    if (!req.employee) return error(res, 401, permissionMessages.authenticationRequired);
 
     const employee = await Employee.findByPk(req.employee.id, {
       include: {
@@ -65,12 +66,12 @@ async function getMyPermissions(req, res, next) {
         include: { model: Permission, as: "permissions" },
       },
     });
-    if (!employee) return error(res, 404, "Employee not found");
+    if (!employee) return error(res, 404, permissionMessages.employeeNotFound);
 
     return success(
       res,
       200,
-      "Permissions fetched successfully",
+      permissionMessages.permissionsFetchedSuccessfully,
       formatPermissionResponse(employee.role),
     );
   } catch (err) {
@@ -82,7 +83,7 @@ async function getMyPermissions(req, res, next) {
 async function getEmployeePermissions(req, res, next) {
   try {
     const { id } = req.params;
-    if (!id) return error(res, 400, "id is required");
+    if (!id) return error(res, 400, permissionMessages.idIsRequired);
 
     const employee = await Employee.findByPk(id, {
       include: {
@@ -91,12 +92,12 @@ async function getEmployeePermissions(req, res, next) {
         include: { model: Permission, as: "permissions" },
       },
     });
-    if (!employee) return error(res, 404, "Employee not found");
+    if (!employee) return error(res, 404, permissionMessages.employeeNotFound);
 
     return success(
       res,
       200,
-      "Permissions fetched successfully",
+      permissionMessages.permissionsFetchedSuccessfully,
       formatPermissionResponse(employee.role),
     );
   } catch (err) {

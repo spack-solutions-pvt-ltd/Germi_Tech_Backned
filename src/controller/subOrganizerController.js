@@ -10,6 +10,7 @@ const {
 } = require("../utils/pagination");
 const { success, error } = require("../utils/response");
 const { generateId } = require("../utils/generateIds");
+const { subOrganizerMessages } = require("../constants/message/subOrganizerMessages");
 
 /** GET /api/sub-organizers?villageId=4&search=ramesh&page=1&limit=20 */
 const getAllSubOrganizers = async (req, res, next) => {
@@ -34,7 +35,7 @@ const getAllSubOrganizers = async (req, res, next) => {
         attributes: ["id", "subOrganizerId", "name"],
         order: [["createdAt", "DESC"]],
       });
-      return success(res, 200, "Sub organizers fetched successfully", { data });
+      return success(res, 200, subOrganizerMessages.subOrganizersFetchedSuccessfully, { data });
     }
 
     const result = await SubOrganizer.findAndCountAll({
@@ -59,7 +60,7 @@ const getAllSubOrganizers = async (req, res, next) => {
     return success(
       res,
       200,
-      "Sub organizers fetched successfully",
+      subOrganizerMessages.subOrganizersFetchedSuccessfully,
       buildPaginatedResponse(result, page, limit),
     );
   } catch (err) {
@@ -71,15 +72,15 @@ const getAllSubOrganizers = async (req, res, next) => {
 const getSubOrganizersByVillageId = async (req, res, next) => {
   try {
     const { villageId } = req.params;
-    if (!villageId) return error(res, 400, "villageId is required");
+    if (!villageId) return error(res, 400, subOrganizerMessages.villageIdIsRequired);
 
     const village = await Village.findByPk(villageId);
-    if (!village) return error(res, 404, "Village not found");
+    if (!village) return error(res, 404, subOrganizerMessages.villageNotFound);
 
     // ?status=Active|Inactive
     const { status } = req.query;
     if (status && !["Active", "Inactive"].includes(status)) {
-      return error(res, 400, "status must be Active or Inactive");
+      return error(res, 400, subOrganizerMessages.statusMustBeActiveOrInactive);
     }
     const where = { villageId, ...(status && { status }) };
 
@@ -89,7 +90,7 @@ const getSubOrganizersByVillageId = async (req, res, next) => {
         where,
         attributes: ["id", "name"],
       });
-      return success(res, 200, "Sub organizers fetched successfully", { data });
+      return success(res, 200, subOrganizerMessages.subOrganizersFetchedSuccessfully, { data });
     }
 
     const { page, limit, offset } = getPagination(req.query);
@@ -107,7 +108,7 @@ const getSubOrganizersByVillageId = async (req, res, next) => {
     return success(
       res,
       200,
-      "Sub organizers fetched successfully",
+      subOrganizerMessages.subOrganizersFetchedSuccessfully,
       buildPaginatedResponse(result, page, limit),
     );
   } catch (err) {
@@ -119,7 +120,7 @@ const getSubOrganizersByVillageId = async (req, res, next) => {
 const getSubOrganizerById = async (req, res, next) => {
   try {
     const { id } = req.params;
-    if (!id) return error(res, 400, "id is required");
+    if (!id) return error(res, 400, subOrganizerMessages.idIsRequired);
 
     const subOrganizer = await SubOrganizer.findByPk(id, {
       include: [
@@ -135,9 +136,9 @@ const getSubOrganizerById = async (req, res, next) => {
         },
       ],
     });
-    if (!subOrganizer) return error(res, 404, "Sub organizer not found");
+    if (!subOrganizer) return error(res, 404, subOrganizerMessages.subOrganizerNotFound);
 
-    return success(res, 200, "Sub organizer fetched successfully", {
+    return success(res, 200, subOrganizerMessages.subOrganizerFetchedSuccessfully, {
       data: subOrganizer,
     });
   } catch (err) {
@@ -150,11 +151,11 @@ const createSubOrganizer = async (req, res, next) => {
   try {
     const { villageId, name, number, acres, status } = req.body;
 
-    if (!villageId) return error(res, 400, "villageId is required");
-    if (!name) return error(res, 400, "name is required");
+    if (!villageId) return error(res, 400, subOrganizerMessages.villageIdIsRequired);
+    if (!name) return error(res, 400, subOrganizerMessages.nameIsRequired);
 
     const village = await Village.findByPk(villageId);
-    if (!village) return error(res, 404, "Village not found");
+    if (!village) return error(res, 404, subOrganizerMessages.villageNotFound);
 
     const createdBy = req.employee ? req.employee.id : null; // set once auth middleware is wired in
 
@@ -169,7 +170,7 @@ const createSubOrganizer = async (req, res, next) => {
     const subOrganizerId = await generateId("SUBORG", subOrganizer?.id);
     await subOrganizer.update({ subOrganizerId });
 
-    return success(res, 201, "Sub organizer created successfully", {
+    return success(res, 201, subOrganizerMessages.subOrganizerCreatedSuccessfully, {
       data: subOrganizer,
     });
   } catch (err) {
@@ -181,10 +182,10 @@ const createSubOrganizer = async (req, res, next) => {
 const updateSubOrganizer = async (req, res, next) => {
   try {
     const { subOrganizerId } = req.params;
-    if (!subOrganizerId) return error(res, 400, "subOrganizerId is required");
+    if (!subOrganizerId) return error(res, 400, subOrganizerMessages.subOrganizerIdIsRequired);
 
     const subOrganizer = await SubOrganizer.findByPk(subOrganizerId);
-    if (!subOrganizer) return error(res, 404, "Sub organizer not found");
+    if (!subOrganizer) return error(res, 404, subOrganizerMessages.subOrganizerNotFound);
 
     const { name, number, acres, status, villageId } = req.body;
 
@@ -196,7 +197,7 @@ const updateSubOrganizer = async (req, res, next) => {
       ...(villageId !== undefined && { villageId }),
     });
 
-    return success(res, 200, "Sub organizer updated successfully", {
+    return success(res, 200, subOrganizerMessages.subOrganizerUpdatedSuccessfully, {
       data: subOrganizer,
     });
   } catch (err) {
@@ -210,16 +211,16 @@ const updateSubOrganizerStatusById = async (req, res, next) => {
     if (!subOrganizerId)
       return res
         .status(400)
-        .json({ status: false, message: "subOrganizerId is required" });
+        .json({ status: false, message: subOrganizerMessages.subOrganizerIdIsRequired });
     const subOrganizer = await SubOrganizer.findByPk(subOrganizerId);
     if (!subOrganizer)
       return res
         .status(404)
-        .json({ success: false, message: "subOrganizer not found" });
+        .json({ success: false, message: subOrganizerMessages.subOrganizerNotFound2 });
     await subOrganizer.update({ status: req.body.status });
     return res
       .status(200)
-      .json({ success: true, message: "Status updated successfully!" });
+      .json({ success: true, message: subOrganizerMessages.statusUpdatedSuccessfully });
   } catch (error) {
     next(error);
   }
@@ -253,7 +254,7 @@ const getSubOrganizerSummary = async (req, res, next) => {
       SubOrganizer.sum("acres"),
     ]);
 
-    return success(res, 200, "Sub organiser summary fetched successfully", {
+    return success(res, 200, subOrganizerMessages.subOrganiserSummaryFetchedSuccessfully, {
       data: {
         totalSubOrganizers: total,
         activeSubOrganizers: total - inactive,

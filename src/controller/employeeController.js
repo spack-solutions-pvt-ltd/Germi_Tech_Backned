@@ -22,6 +22,7 @@ const { welcomeEmailTemplate } = require("../templates/welcomeEmail");
 const fs = require("fs");
 const path = require("path");
 const { getFileUrl, deleteFile, isLocalFile, LOCAL_UPLOAD_ROOT } = require("../utils/s3");
+const { employeeMessages } = require("../constants/message/employeeMessages");
 
 const DOCUMENT_LABELS = {
   aadhaar_card: "Aadhaar Card",
@@ -93,7 +94,7 @@ async function getEmployeeKpis(req, res, next) {
         Employee.count({ where: { status: "Inactive" } }),
       ]);
 
-    return success(res, 200, "Employee KPIs fetched successfully", {
+    return success(res, 200, employeeMessages.employeeKpisFetchedSuccessfully, {
       data: { totalEmployees, l2Employees, l3Employees, inactiveEmployees },
     });
   } catch (err) {
@@ -128,7 +129,7 @@ async function getAllEmployees(req, res, next) {
         attributes: ["id", "empId", "name"],
         order: [["createdAt", "DESC"]],
       });
-      return success(res, 200, "Employees fetched successfully", { data });
+      return success(res, 200, employeeMessages.employeesFetchedSuccessfully, { data });
     }
 
     const result = await Employee.findAndCountAll({
@@ -142,7 +143,7 @@ async function getAllEmployees(req, res, next) {
     return success(
       res,
       200,
-      "Employees fetched successfully",
+      employeeMessages.employeesFetchedSuccessfully,
       buildPaginatedResponse(result, page, limit),
     );
   } catch (err) {
@@ -154,12 +155,12 @@ async function getAllEmployees(req, res, next) {
 async function getEmployeeById(req, res, next) {
   try {
     const { id } = req.params;
-    if (!id) return error(res, 400, "id is required");
+    if (!id) return error(res, 400, employeeMessages.idIsRequired);
 
     const employee = await Employee.findByPk(id, {
       include: employeeDetailIncludes,
     });
-    if (!employee) return error(res, 404, "Employee not found");
+    if (!employee) return error(res, 404, employeeMessages.employeeNotFound);
 
     const payload = employee.toJSON();
     payload.documents = await Promise.all(payload.documents.map(withDocumentLinks));
@@ -168,7 +169,7 @@ async function getEmployeeById(req, res, next) {
       displayType: insuranceDisplayType(i),
     }));
 
-    return success(res, 200, "Employee fetched successfully", {
+    return success(res, 200, employeeMessages.employeeFetchedSuccessfully, {
       data: payload,
     });
   } catch (err) {
@@ -192,17 +193,17 @@ async function createEmployee(req, res, next) {
       joiningDate,
     } = req.body;
 
-    if (!name) return error(res, 400, "name is required");
-    if (!number) return error(res, 400, "number is required");
-    if (!level) return error(res, 400, "level is required");
-    if (!roleId) return error(res, 400, "roleId is required");
+    if (!name) return error(res, 400, employeeMessages.nameIsRequired);
+    if (!number) return error(res, 400, employeeMessages.numberIsRequired);
+    if (!level) return error(res, 400, employeeMessages.levelIsRequired);
+    if (!roleId) return error(res, 400, employeeMessages.roleIdIsRequired);
 
     const role = await Role.findByPk(roleId);
-    if (!role) return error(res, 404, "Role not found");
+    if (!role) return error(res, 404, employeeMessages.roleNotFound);
 
     const existingByEmail = await Employee.findOne({ where: { email } });
     if (existingByEmail)
-      return error(res, 409, "An employee with this email already exists");
+      return error(res, 409, employeeMessages.anEmployeeWithThisEmailAlready);
 
     const plainPassword = generateDummyPassword(10);
     const passwordHash = await bcrypt.hash(plainPassword, 10);
@@ -245,10 +246,10 @@ async function createEmployee(req, res, next) {
     } else {
       emailSent = false;
       emailError =
-        "No email provided on this employee — share the password manually.";
+        employeeMessages.noEmailProvidedOnThisEmployee;
     }
 
-    return success(res, 201, "Employee created successfully", {
+    return success(res, 201, employeeMessages.employeeCreatedSuccessfully, {
       emailSent,
       emailError,
     });
@@ -265,10 +266,10 @@ async function createEmployee(req, res, next) {
 async function updateEmployee(req, res, next) {
   try {
     const { id } = req.params;
-    if (!id) return error(res, 400, "id is required");
+    if (!id) return error(res, 400, employeeMessages.idIsRequired);
 
     const employee = await Employee.findByPk(id);
-    if (!employee) return error(res, 404, "Employee not found");
+    if (!employee) return error(res, 404, employeeMessages.employeeNotFound);
 
     const {
       name,
@@ -283,7 +284,7 @@ async function updateEmployee(req, res, next) {
 
     if (roleId !== undefined) {
       const role = await Role.findByPk(roleId);
-      if (!role) return error(res, 404, "Role not found");
+      if (!role) return error(res, 404, employeeMessages.roleNotFound);
     }
 
     if (number !== undefined && number !== employee.number) {
@@ -291,7 +292,7 @@ async function updateEmployee(req, res, next) {
         where: { number, id: { [Op.ne]: id } },
       });
       if (existingByNumber)
-        return error(res, 409, "An employee with this number already exists");
+        return error(res, 409, employeeMessages.anEmployeeWithThisNumberAlready);
     }
 
     if (email !== undefined && email !== employee.email) {
@@ -299,7 +300,7 @@ async function updateEmployee(req, res, next) {
         where: { email, id: { [Op.ne]: id } },
       });
       if (existingByEmail)
-        return error(res, 409, "An employee with this email already exists");
+        return error(res, 409, employeeMessages.anEmployeeWithThisEmailAlready);
     }
 
     await employee.update({
@@ -313,7 +314,7 @@ async function updateEmployee(req, res, next) {
       ...(joiningDate !== undefined && { joiningDate }),
     });
 
-    return success(res, 200, "Employee updated successfully", {
+    return success(res, 200, employeeMessages.employeeUpdatedSuccessfully, {
       data: employee,
     });
   } catch (err) {
@@ -325,16 +326,16 @@ const updateEmployeeStatus = async (req, res, next) => {
   try {
     const { empId } = req.params;
     const { status } = req.body;
-    if (!empId) return error(res, 400, "EmployeeId is required");
-    if (!status) return error(res, 400, "status is required");
+    if (!empId) return error(res, 400, employeeMessages.employeeIdIsRequired);
+    if (!status) return error(res, 400, employeeMessages.statusIsRequired);
     if (!["Active", "Inactive"].includes(status))
-      return error(res, 400, "Invalid status");
+      return error(res, 400, employeeMessages.invalidStatus);
 
     const employee = await Employee.findByPk(empId);
-    if (!employee) return error(res, 404, "Employee not found");
+    if (!employee) return error(res, 404, employeeMessages.employeeNotFound);
 
     await employee.update({ status });
-    return success(res, 200, "Employee status updated successfully");
+    return success(res, 200, employeeMessages.employeeStatusUpdatedSuccessfully);
   } catch (err) {
     next(err);
   }
@@ -352,7 +353,7 @@ async function updateBankAccount(req, res, next) {
   try {
     const { id } = req.params;
     const employee = await Employee.findByPk(id);
-    if (!employee) return error(res, 404, "Employee not found");
+    if (!employee) return error(res, 404, employeeMessages.employeeNotFound);
 
     const { accountHolderName, accountNumber, ifscCode, bankName, upiId } =
       req.body;
@@ -360,7 +361,7 @@ async function updateBankAccount(req, res, next) {
       return error(
         res,
         400,
-        "Account holder name, account number, IFSC code and bank name are required",
+        employeeMessages.accountHolderNameAccountNumberIfsc,
       );
     }
 
@@ -384,7 +385,7 @@ async function updateBankAccount(req, res, next) {
       ],
     });
 
-    return success(res, 200, "Bank account details updated successfully", {
+    return success(res, 200, employeeMessages.bankAccountDetailsUpdatedSuccessfully, {
       data: updated,
     });
   } catch (err) {
@@ -411,21 +412,21 @@ async function addEmployeeDocument(req, res, next) {
   try {
     const { id } = req.params;
     const employee = await Employee.findByPk(id);
-    if (!employee) return error(res, 404, "Employee not found");
+    if (!employee) return error(res, 404, employeeMessages.employeeNotFound);
 
     const { type, documentNumber, label } = req.body;
     if (!DOCUMENT_TYPES.includes(type)) {
       return error(
         res,
         400,
-        `type must be one of: ${DOCUMENT_TYPES.join(", ")}`,
+        employeeMessages.typeMustBeOneOf(DOCUMENT_TYPES.join(", ")),
       );
     }
     if (type === "other" && !label) {
-      return error(res, 400, "label is required when type is 'other'");
+      return error(res, 400, employeeMessages.labelIsRequiredWhenTypeIs);
     }
     if (!req.file) {
-      return error(res, 400, "A document file is required");
+      return error(res, 400, employeeMessages.aDocumentFileIsRequired);
     }
 
     const fileUrl = req.file.key; // private S3 key (employee-documents/...) — never a public URL
@@ -440,7 +441,7 @@ async function addEmployeeDocument(req, res, next) {
       updatedBy: req.employee?.id || null,
     });
 
-    return success(res, 201, "Document added successfully", {
+    return success(res, 201, employeeMessages.documentAddedSuccessfully, {
       data: await withDocumentLinks(document),
     });
   } catch (err) {
@@ -457,19 +458,19 @@ async function updateEmployeeDocument(req, res, next) {
     const document = await EmployeeDocument.findOne({
       where: { id: documentId, employeeId: id },
     });
-    if (!document) return error(res, 404, "Document not found");
+    if (!document) return error(res, 404, employeeMessages.documentNotFound);
 
     const { type, documentNumber, label } = req.body;
     if (type !== undefined && !DOCUMENT_TYPES.includes(type)) {
       return error(
         res,
         400,
-        `type must be one of: ${DOCUMENT_TYPES.join(", ")}`,
+        employeeMessages.typeMustBeOneOf(DOCUMENT_TYPES.join(", ")),
       );
     }
     const effectiveType = type ?? document.type;
     if (effectiveType === "other" && !(label ?? document.label)) {
-      return error(res, 400, "label is required when type is 'other'");
+      return error(res, 400, employeeMessages.labelIsRequiredWhenTypeIs);
     }
 
     const patch = {
@@ -491,7 +492,7 @@ async function updateEmployeeDocument(req, res, next) {
     await document.update(patch);
     if (previousFile) await deleteFile(previousFile);
 
-    return success(res, 200, "Document updated successfully", {
+    return success(res, 200, employeeMessages.documentUpdatedSuccessfully, {
       data: await withDocumentLinks(document),
     });
   } catch (err) {
@@ -509,9 +510,9 @@ async function getEmployeeDocument(req, res, next) {
         { model: Employee, as: "updater", attributes: ["id", "name", "level"] },
       ],
     });
-    if (!document) return error(res, 404, "Document not found");
+    if (!document) return error(res, 404, employeeMessages.documentNotFound);
 
-    return success(res, 200, "Document fetched successfully", {
+    return success(res, 200, employeeMessages.documentFetchedSuccessfully, {
       data: await withDocumentLinks(document),
     });
   } catch (err) {
@@ -530,14 +531,14 @@ const downloadEmployeeDocument = async (req, res, next) => {
     const document = await EmployeeDocument.findOne({
       where: { id: documentId, employeeId: id },
     });
-    if (!document) return error(res, 404, "Employee document not found");
-    if (!document.fileUrl) return error(res, 404, "Document file path is missing");
+    if (!document) return error(res, 404, employeeMessages.employeeDocumentNotFound);
+    if (!document.fileUrl) return error(res, 404, employeeMessages.documentFilePathIsMissing);
 
     // Local file: send it from disk (resolved from the file name only, so the
     // path can't escape the uploads folder).
     if (isLocalFile(document.fileUrl)) {
       const filePath = path.join(LOCAL_UPLOAD_ROOT, "employee-documents", path.basename(document.fileUrl));
-      if (!fs.existsSync(filePath)) return error(res, 404, "File not found on server");
+      if (!fs.existsSync(filePath)) return error(res, 404, employeeMessages.fileNotFoundOnServer);
       const downloadName = document.originalFileName || path.basename(document.fileUrl);
       return res.download(filePath, downloadName, (err) => {
         if (err && !res.headersSent) next(err);
@@ -546,7 +547,7 @@ const downloadEmployeeDocument = async (req, res, next) => {
 
     // S3: short-lived CloudFront signed link.
     const url = getFileUrl(document.fileUrl, { expiresInSeconds: DOCUMENT_LINK_SECONDS });
-    if (!url) return error(res, 503, "File links are not available yet — CloudFront is not configured");
+    if (!url) return error(res, 503, employeeMessages.fileLinksAreNotAvailableYet);
     return res.redirect(url);
   } catch (err) {
     next(err);
@@ -559,11 +560,11 @@ async function deleteEmployeeDocument(req, res, next) {
     const document = await EmployeeDocument.findOne({
       where: { id: documentId, employeeId: id },
     });
-    if (!document) return error(res, 404, "Document not found");
+    if (!document) return error(res, 404, employeeMessages.documentNotFound);
     const storedFile = document.fileUrl;
     await document.destroy();
     await deleteFile(storedFile);
-    return success(res, 200, "Document deleted successfully");
+    return success(res, 200, employeeMessages.documentDeletedSuccessfully);
   } catch (err) {
     next(err);
   }
@@ -581,7 +582,7 @@ async function addEmployeeInsurance(req, res, next) {
   try {
     const { id } = req.params;
     const employee = await Employee.findByPk(id);
-    if (!employee) return error(res, 404, "Employee not found");
+    if (!employee) return error(res, 404, employeeMessages.employeeNotFound);
 
     const { type, otherTypeName, provider, startDate, expiryDate, amount } =
       req.body;
@@ -589,17 +590,17 @@ async function addEmployeeInsurance(req, res, next) {
       return error(
         res,
         400,
-        `type must be one of: ${INSURANCE_TYPES.join(", ")}`,
+        employeeMessages.typeMustBeOneOf(INSURANCE_TYPES.join(", ")),
       );
     }
     if (type === "other" && !otherTypeName) {
-      return error(res, 400, "otherTypeName is required when type is 'other'");
+      return error(res, 400, employeeMessages.otherTypeNameIsRequiredWhenTypeIs);
     }
     if (!provider || !startDate || !expiryDate || amount === undefined) {
       return error(
         res,
         400,
-        "provider, startDate, expiryDate and amount are required",
+        employeeMessages.providerStartdateExpirydateAndAmountAre,
       );
     }
 
@@ -616,7 +617,7 @@ async function addEmployeeInsurance(req, res, next) {
     // Already within 10 days of expiry? Raise the payment now instead of waiting for the job.
     await createInsurancePaymentIfDue(insurance);
 
-    return success(res, 201, "Insurance added successfully", {
+    return success(res, 201, employeeMessages.insuranceAddedSuccessfully, {
       data: {
         ...insurance.toJSON(),
         displayType: insuranceDisplayType(insurance),
@@ -637,7 +638,7 @@ async function updateEmployeeInsurance(req, res, next) {
     const insurance = await EmployeeInsurance.findOne({
       where: { id: insuranceId, employeeId: id },
     });
-    if (!insurance) return error(res, 404, "Insurance record not found");
+    if (!insurance) return error(res, 404, employeeMessages.insuranceRecordNotFound);
 
     const { type, otherTypeName, provider, startDate, expiryDate, amount } =
       req.body;
@@ -645,7 +646,7 @@ async function updateEmployeeInsurance(req, res, next) {
       return error(
         res,
         400,
-        `type must be one of: ${INSURANCE_TYPES.join(", ")}`,
+        employeeMessages.typeMustBeOneOf(INSURANCE_TYPES.join(", ")),
       );
     }
     const effectiveType = type ?? insurance.type;
@@ -653,7 +654,7 @@ async function updateEmployeeInsurance(req, res, next) {
       effectiveType === "other" &&
       !(otherTypeName ?? insurance.otherTypeName)
     ) {
-      return error(res, 400, "otherTypeName is required when type is 'other'");
+      return error(res, 400, employeeMessages.otherTypeNameIsRequiredWhenTypeIs);
     }
 
     await insurance.update({
@@ -670,7 +671,7 @@ async function updateEmployeeInsurance(req, res, next) {
     });
     await createInsurancePaymentIfDue(insurance);
 
-    return success(res, 200, "Insurance updated successfully", {
+    return success(res, 200, employeeMessages.insuranceUpdatedSuccessfully, {
       data: {
         ...insurance.toJSON(),
         displayType: insuranceDisplayType(insurance),
@@ -690,9 +691,9 @@ async function getEmployeeInsurance(req, res, next) {
         { model: Employee, as: "updater", attributes: ["id", "name", "level"] },
       ],
     });
-    if (!insurance) return error(res, 404, "Insurance record not found");
+    if (!insurance) return error(res, 404, employeeMessages.insuranceRecordNotFound);
 
-    return success(res, 200, "Insurance fetched successfully", {
+    return success(res, 200, employeeMessages.insuranceFetchedSuccessfully, {
       data: {
         ...insurance.toJSON(),
         displayType: insuranceDisplayType(insurance),

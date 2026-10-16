@@ -1,5 +1,6 @@
 "use strict";
 const { Router } = require("express");
+const { loadingRequestsRoutes } = require("../constants/routes");
 const { loadingRequestUpload } = require("../middleWare/requestUpload.middleware");
 const {
   getMyAssignedAllotmentVillages,
@@ -26,24 +27,24 @@ const {
 const router = Router();
 
 // Requests → Loading (own requests)
-router.get("/my-requests", getMyLoadingRequests);
-router.get("/my-summary", getMyLoadingSummary);
-router.get("/allotment-villages", getMyAssignedAllotmentVillages); // "Allotment" dropdown — my own (Self)
-router.get("/supervisors", getSupervisorOptions); // "Supervisor" dropdown on a loading row
-router.get("/supervisors/:supervisorId/allotment-villages", getAllotmentVillagesBySupervisor); // that supervisor's allotments
-router.get("/warehouses", getLoadingWarehouses); // "To location (warehouse)" dropdown
+router.get(loadingRequestsRoutes.myRequests, getMyLoadingRequests);
+router.get(loadingRequestsRoutes.mySummary, getMyLoadingSummary);
+router.get(loadingRequestsRoutes.allotmentVillages, getMyAssignedAllotmentVillages); // "Allotment" dropdown — my own (Self)
+router.get(loadingRequestsRoutes.supervisors, getSupervisorOptions); // "Supervisor" dropdown on a loading row
+router.get(loadingRequestsRoutes.supervisorsAllotmentVillagesBySupervisorId, getAllotmentVillagesBySupervisor); // that supervisor's allotments
+router.get(loadingRequestsRoutes.warehouses, getLoadingWarehouses); // "To location (warehouse)" dropdown
 
 // Verifications / Approvals
-router.get("/summary", getLoadingSummary);
-router.get("/", getAllLoadingRequests);
+router.get(loadingRequestsRoutes.summary, getLoadingSummary);
+router.get(loadingRequestsRoutes.root, getAllLoadingRequests);
 
-router.get("/:id", getLoadingRequestById);
-router.get("/:id/payments", getLoadingRequestPayments);
-router.post("/", loadingRequestUpload, createLoadingRequest);
-router.put("/:id", loadingRequestUpload, updateLoadingRequest); // creator only, Pending only
-router.put("/:id/amounts", updateLoadingAmounts);
-router.put("/:id/verify", verifyLoadingRequest);
-router.put("/:id/cancel", cancelLoadingRequest);
-router.post("/:id/payments", createLoadingPayments); // transport | hamali | both
+router.get(loadingRequestsRoutes.byId, getLoadingRequestById);
+router.get(loadingRequestsRoutes.paymentsById, getLoadingRequestPayments);
+router.post(loadingRequestsRoutes.root, loadingRequestUpload, createLoadingRequest);
+router.put(loadingRequestsRoutes.byId, loadingRequestUpload, updateLoadingRequest); // creator only, Pending only
+router.put(loadingRequestsRoutes.amountsById, updateLoadingAmounts);
+router.put(loadingRequestsRoutes.verifyById, verifyLoadingRequest);
+router.put(loadingRequestsRoutes.cancelById, cancelLoadingRequest);
+router.post(loadingRequestsRoutes.paymentsById, createLoadingPayments); // transport | hamali | both
 
 module.exports = router;

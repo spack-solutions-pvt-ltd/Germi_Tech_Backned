@@ -7,6 +7,7 @@ const {
 } = require("../utils/pagination");
 const { success, error } = require("../utils/response");
 const { generateId } = require("../utils/generateIds");
+const { warehouseMessages } = require("../constants/message/warehouseMessages");
 
 /** GET /api/warehouses?companyId=3&search=cold&page=1&limit=20 */
 const getAllWarehouses = async (req, res, next) => {
@@ -35,7 +36,7 @@ const getAllWarehouses = async (req, res, next) => {
     return success(
       res,
       200,
-      "Warehouses fetched successfully",
+      warehouseMessages.warehousesFetchedSuccessfully,
       buildPaginatedResponse(result, page, limit),
     );
   } catch (err) {
@@ -48,7 +49,7 @@ const getWarehousesByCompanyId = async (req, res, next) => {
   try {
     const { seedCompanyId, search } = req.params;
     if (!seedCompanyId) {
-      return error(res, 400, "seedCompanyId is required");
+      return error(res, 400, warehouseMessages.seedCompanyIdIsRequired);
     }
 
     const company = await SeedCompany.findByPk(seedCompanyId, {
@@ -61,7 +62,7 @@ const getWarehousesByCompanyId = async (req, res, next) => {
       ],
     });
     if (!company) {
-      return error(res, 404, "Seed company not found");
+      return error(res, 404, warehouseMessages.seedCompanyNotFound);
     }
 
     const where = {};
@@ -88,7 +89,7 @@ const getWarehousesByCompanyId = async (req, res, next) => {
     };
     return res.status(200).json({
       success: true,
-      message: "Warehouses fetched successfully",
+      message: warehouseMessages.warehousesFetchedSuccessfully,
       data,
       pagination: {
         total: count,
@@ -106,12 +107,12 @@ const getWarehousesByCompanyId = async (req, res, next) => {
 const getWarehouseById = async (req, res, next) => {
   try {
     const { warehouseId } = req.params;
-    if (!warehouseId) return error(res, 400, "warehouseId is required");
+    if (!warehouseId) return error(res, 400, warehouseMessages.warehouseIdIsRequired);
 
     const warehouse = await Warehouse.findByPk(warehouseId);
-    if (!warehouse) return error(res, 404, "Warehouse not found");
+    if (!warehouse) return error(res, 404, warehouseMessages.warehouseNotFound);
 
-    return success(res, 200, "Warehouse fetched successfully", {
+    return success(res, 200, warehouseMessages.warehouseFetchedSuccessfully, {
       data: warehouse,
     });
   } catch (err) {
@@ -125,11 +126,11 @@ const createWarehouse = async (req, res, next) => {
     const { companyId, locationName, pocName, pocNumber, locationLink } =
       req.body;
 
-    if (!companyId) return error(res, 400, "companyId is required");
-    if (!locationName) return error(res, 400, "locationName is required");
+    if (!companyId) return error(res, 400, warehouseMessages.companyIdIsRequired);
+    if (!locationName) return error(res, 400, warehouseMessages.locationNameIsRequired);
 
     const company = await SeedCompany.findByPk(companyId);
-    if (!company) return error(res, 404, "Seed company not found");
+    if (!company) return error(res, 404, warehouseMessages.seedCompanyNotFound);
 
     const warehouse = await Warehouse.create({
       companyId,
@@ -142,7 +143,7 @@ const createWarehouse = async (req, res, next) => {
     const warehouseId = generateId("WH", warehouse.id);
     await warehouse.update({ warehouseId });
 
-    return success(res, 201, "Warehouse created successfully", {
+    return success(res, 201, warehouseMessages.warehouseCreatedSuccessfully, {
       data: warehouse,
     });
   } catch (err) {
@@ -154,10 +155,10 @@ const createWarehouse = async (req, res, next) => {
 const updateWarehouse = async (req, res, next) => {
   try {
     const { warehouseId } = req.params;
-    if (!warehouseId) return error(res, 400, "warehouseId is required");
+    if (!warehouseId) return error(res, 400, warehouseMessages.warehouseIdIsRequired);
 
     const warehouse = await Warehouse.findByPk(warehouseId);
-    if (!warehouse) return error(res, 404, "Warehouse not found");
+    if (!warehouse) return error(res, 404, warehouseMessages.warehouseNotFound);
 
     const { locationName, pocName, pocNumber, locationLink } = req.body;
 
@@ -168,7 +169,7 @@ const updateWarehouse = async (req, res, next) => {
       ...(locationLink !== undefined && { locationLink }),
     });
 
-    return success(res, 200, "Warehouse updated successfully", {
+    return success(res, 200, warehouseMessages.warehouseUpdatedSuccessfully, {
       data: warehouse,
     });
   } catch (err) {

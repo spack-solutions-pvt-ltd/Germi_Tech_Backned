@@ -1,5 +1,6 @@
 "use strict";
 const { Router } = require("express");
+const { taskRoutes } = require("../constants/routes");
 const {
   getTasksSummary,
   getMyTasksSummary,
@@ -14,13 +15,13 @@ const {
 
 const router = Router();
 
-router.get("/summary", getTasksSummary); // KPI cards — before /:id
-router.get("/", getAllTasks);
-router.get("/my-tasks", getMyTasks);
-router.get("/my-summary", getMyTasksSummary); // My Tasks KPI cards
-router.get("/:id", getTaskById);
-router.post("/", createTask);
-router.put("/:id", updateTask);
-router.put("/:id/status", updateTaskStatus);
+router.get(taskRoutes.summary, getTasksSummary); // KPI cards — before /:id
+router.get(taskRoutes.root, getAllTasks);
+router.get(taskRoutes.myTasks, getMyTasks);
+router.get(taskRoutes.mySummary, getMyTasksSummary); // My Tasks KPI cards
+router.get(taskRoutes.byId, getTaskById);
+router.post(taskRoutes.root, createTask);
+router.put(taskRoutes.byId, updateTask);
+router.put(taskRoutes.statusById, updateTaskStatus);
 
 module.exports = router;

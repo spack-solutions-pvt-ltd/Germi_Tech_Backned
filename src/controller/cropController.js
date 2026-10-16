@@ -7,6 +7,7 @@ const {
   updateCropSchema,
 } = require("../validators/cropValidator");
 const { Op } = require("sequelize");
+const { cropMessages } = require("../constants/message/cropMessages");
 
 async function getAllCrops(req, res, next) {
   try {
@@ -30,7 +31,7 @@ async function getAllCrops(req, res, next) {
 
       return res.status(200).json({
         success: true,
-        message: "Crops fetched successfully",
+        message: cropMessages.cropFetchMsg,
         data: crops,
       });
     }
@@ -48,7 +49,7 @@ async function getAllCrops(req, res, next) {
     ) {
       return res.status(400).json({
         success: false,
-        message: "page and limit must be positive integers",
+        message: cropMessages.pageAndLimitMustBePositive,
       });
     }
 
@@ -74,7 +75,7 @@ async function getAllCrops(req, res, next) {
 
     return res.status(200).json({
       success: true,
-      message: "Crops fetched successfully",
+      message: cropMessages.cropFetchMsg,
       data: rows,
       pagination: {
         total: count,
@@ -94,21 +95,21 @@ async function getCropById(req, res) {
     if (!cropId) {
       res.status(401).json({
         success: false,
-        message: "cropId is required",
+        message: cropMessages.cropIdReqMsg,
       });
     }
     const crop = await Crop.findByPk(cropId);
     if (!crop)
       return res
         .status(404)
-        .json({ success: false, message: "Crop not found" });
+        .json({ success: false, message: cropMessages.cropNotFound });
     res
       .status(200)
-      .json({ success: true, message: "Crop fetched", data: crop });
+      .json({ success: true, message: cropMessages.cropFetchMsgById, data: crop });
   } catch (err) {
     res
       .status(500)
-      .json({ message: "Failed to fetch crop", error: err.message });
+      .json({ message: cropMessages.failedToFetchMsg, error: err.message });
   }
 }
 
@@ -117,7 +118,7 @@ async function createCrop(req, res, next) {
   if (!parsed.success) {
     return res
       .status(422)
-      .json({ message: "Validation failed", errors: parsed.error.flatten() });
+      .json({ message: cropMessages.validationFailed, errors: parsed.error.flatten() });
   }
 
   try {
@@ -126,7 +127,7 @@ async function createCrop(req, res, next) {
     await crop.update({ cropId });
     res.status(201).json({
       success: true,
-      message: "Crop created",
+      message: cropMessages.cropCreated,
       data: crop,
     });
   } catch (err) {
@@ -139,25 +140,25 @@ async function updateCrop(req, res) {
   if (!parsed.success) {
     return res
       .status(422)
-      .json({ message: "Validation failed", errors: parsed.error.flatten() });
+      .json({ message: cropMessages.validationFailed, errors: parsed.error.flatten() });
   }
 
   try {
     const { cropId } = req.params;
     const crop = await Crop.findByPk(cropId);
-    if (!crop) return res.status(404).json({ message: "Crop not found" });
+    if (!crop) return res.status(404).json({ message: cropMessages.cropNotFound });
 
     await crop.update(parsed.data);
-    res.json({ success: true, message: "Crop updated!", data: crop });
+    res.json({ success: true, message: cropMessages.cropUpdated, data: crop });
   } catch (err) {
     if (err.name === "SequelizeUniqueConstraintError") {
       return res
         .status(409)
-        .json({ message: "A crop with this name already exists" });
+        .json({ message: cropMessages.aCropWithThisNameAlready });
     }
     res
       .status(400)
-      .json({ message: "Failed to update crop", error: err.message });
+      .json({ message: cropMessages.failedToUpdateCrop, error: err.message });
   }
 }
 
@@ -167,16 +168,16 @@ const updateCropStatusById = async (req, res, next) => {
     if (!cropId)
       return res
         .status(400)
-        .json({ status: false, message: "cropId is required" });
+        .json({ status: false, message: cropMessages.cropIdReqMsg });
     const crop = await Crop.findByPk(cropId);
     if (!crop)
       return res
         .status(404)
-        .json({ success: false, message: "Crop not found" });
+        .json({ success: false, message: cropMessages.cropNotFound });
     await crop.update({ status: req.body.status });
     return res
       .status(200)
-      .json({ success: true, message: "Status updated successfully!" });
+      .json({ success: true, message: cropMessages.statusUpdatedSuccessfully });
   } catch (error) {
     next(error);
   }
@@ -195,7 +196,7 @@ async function getCropSummary(req, res, next) {
 
     return res.status(200).json({
       success: true,
-      message: "Crop summary fetched successfully",
+      message: cropMessages.cropSummaryFetchedSuccessfully,
       data: {
         totalCrops,
         activeCrops,

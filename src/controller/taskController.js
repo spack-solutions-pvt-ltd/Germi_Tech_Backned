@@ -18,6 +18,7 @@ const {
 } = require("../middleWare/auth.middleware");
 const { success, error } = require("../utils/response");
 const { resolveSeason } = require("../utils/periods");
+const { taskMessages } = require("../constants/message/taskMessages");
 
 const TASK_INCLUDES = [
   {
@@ -198,7 +199,7 @@ async function getMyTasksSummary(req, res, next) {
   try {
     await markOverdueTasks();
     const data = await getMyTaskSummary(req.employee.id);
-    return success(res, 200, "My task summary fetched successfully", { data });
+    return success(res, 200, taskMessages.myTaskSummaryFetchedSuccessfully, { data });
   } catch (err) {
     next(err);
   }
@@ -235,7 +236,7 @@ async function getMyTasks(req, res, next) {
       getMyTaskSummary(req.employee.id),
     ]);
 
-    return success(res, 200, "My tasks fetched successfully", {
+    return success(res, 200, taskMessages.myTasksFetchedSuccessfully, {
       ...buildPaginatedResponse(result, page, limit),
       kpis,
     });
@@ -272,10 +273,10 @@ async function getTasksSummary(req, res, next) {
   try {
     await markOverdueTasks();
     const hasGlobalView = await hasGlobalTaskView(req.employee.id);
-    if (hasGlobalView === null) return error(res, 404, "Employee not found");
+    if (hasGlobalView === null) return error(res, 404, taskMessages.employeeNotFound);
 
     const data = await getTaskSummary(hasGlobalView ? {} : { assignedBy: req.employee.id });
-    return success(res, 200, "Task summary fetched successfully", { data });
+    return success(res, 200, taskMessages.taskSummaryFetchedSuccessfully, { data });
   } catch (err) {
     next(err);
   }
@@ -286,7 +287,7 @@ async function getAllTasks(req, res, next) {
     await markOverdueTasks();
 
     const hasGlobalView = await hasGlobalTaskView(req.employee.id);
-    if (hasGlobalView === null) return error(res, 404, "Employee not found");
+    if (hasGlobalView === null) return error(res, 404, taskMessages.employeeNotFound);
 
     const { search, status, assignedBy, assignedTo, taskTypeId } = req.query;
     const { page, limit, offset } = getPagination(req.query);
@@ -320,7 +321,7 @@ async function getAllTasks(req, res, next) {
       getTaskSummary(hasGlobalView ? {} : { assignedBy: req.employee.id }),
     ]);
 
-    return success(res, 200, "Tasks fetched successfully", {
+    return success(res, 200, taskMessages.tasksFetchedSuccessfully, {
       ...buildPaginatedResponse(result, page, limit),
       kpis,
     });
@@ -333,7 +334,7 @@ async function getAllTasks(req, res, next) {
 async function getTaskById(req, res, next) {
   try {
     const { id } = req.params;
-    if (!id) return error(res, 400, "id is required");
+    if (!id) return error(res, 400, taskMessages.idIsRequired);
 
     await markOverdueTasks();
 
@@ -341,9 +342,9 @@ async function getTaskById(req, res, next) {
       include: [...TASK_INCLUDES, TASK_NOTES_INCLUDE],
     });
 
-    if (!task) return error(res, 404, "Task not found");
+    if (!task) return error(res, 404, taskMessages.taskNotFound);
 
-    return success(res, 200, "Task fetched successfully", {
+    return success(res, 200, taskMessages.taskFetchedSuccessfully, {
       data: withConversation(task),
     });
   } catch (err) {
@@ -358,16 +359,16 @@ async function createTask(req, res, next) {
   try {
     const { assignedTo, taskTypeId, description, dueDate } = req.body;
 
-    if (!assignedTo) return error(res, 400, "assignedTo is required");
-    if (!taskTypeId) return error(res, 400, "taskTypeId is required");
-    if (!description) return error(res, 400, "description is required");
-    if (!dueDate) return error(res, 400, "dueDate is required");
+    if (!assignedTo) return error(res, 400, taskMessages.assignedToIsRequired);
+    if (!taskTypeId) return error(res, 400, taskMessages.taskTypeIdIsRequired);
+    if (!description) return error(res, 400, taskMessages.descriptionIsRequired);
+    if (!dueDate) return error(res, 400, taskMessages.dueDateIsRequired);
 
     const assignee = await Employee.findByPk(assignedTo);
-    if (!assignee) return error(res, 404, "assignedTo employee not found");
+    if (!assignee) return error(res, 404, taskMessages.assignedToEmployeeNotFound);
 
     const taskType = await TaskType.findByPk(taskTypeId);
-    if (!taskType) return error(res, 404, "Task type not found");
+    if (!taskType) return error(res, 404, taskMessages.taskTypeNotFound);
 
     const task = await Task.create({
       assignedBy: req.employee.id,
@@ -383,7 +384,7 @@ async function createTask(req, res, next) {
 
     const created = await Task.findByPk(task.id, { include: TASK_INCLUDES });
 
-    return success(res, 201, "Task created successfully", { data: created });
+    return success(res, 201, taskMessages.taskCreatedSuccessfully, { data: created });
   } catch (err) {
     next(err);
   }
@@ -395,10 +396,10 @@ async function createTask(req, res, next) {
 async function updateTask(req, res, next) {
   try {
     const { id } = req.params;
-    if (!id) return error(res, 400, "id is required");
+    if (!id) return error(res, 400, taskMessages.idIsRequired);
 
     const task = await Task.findByPk(id);
-    if (!task) return error(res, 404, "Task not found");
+    if (!task) return error(res, 404, taskMessages.taskNotFound);
 
     // to get the employee permissions
     const employeeWithPermissions = await Employee.findByPk(req.employee.id, {
@@ -408,7 +409,7 @@ async function updateTask(req, res, next) {
         include: { model: Permission, as: "permissions" },
       },
     });
-    if (!employeeWithPermissions) return error(res, 404, "Employee not found");
+    if (!employeeWithPermissions) return error(res, 404, taskMessages.employeeNotFound);
 
     const rolePermissions = employeeWithPermissions.role
       ? employeeWithPermissions.role.permissions
@@ -428,7 +429,7 @@ async function updateTask(req, res, next) {
       return error(
         res,
         403,
-        "You need task_management.edit (for tasks you created) or both task_management.global_view and task_management.edit (to edit any task)",
+        taskMessages.youNeedTaskManagementEditFor,
       );
     }
 
@@ -436,7 +437,7 @@ async function updateTask(req, res, next) {
       return error(
         res,
         409,
-        `Cannot edit a task with status "${task.status}". Use reassign or cancel instead.`,
+        taskMessages.cannotEditATaskWithStatus(task.status),
       );
     }
 
@@ -444,13 +445,13 @@ async function updateTask(req, res, next) {
 
     if (assignedTo !== undefined) {
       const assignee = await Employee.findByPk(assignedTo);
-      if (!assignee) return error(res, 404, "assignedTo employee not found");
+      if (!assignee) return error(res, 404, taskMessages.assignedToEmployeeNotFound);
       // No level restriction on the assignee — see createTask for why.
     }
 
     if (taskTypeId !== undefined) {
       const taskType = await TaskType.findByPk(taskTypeId);
-      if (!taskType) return error(res, 404, "Task type not found");
+      if (!taskType) return error(res, 404, taskMessages.taskTypeNotFound);
     }
 
     await task.update({
@@ -463,7 +464,7 @@ async function updateTask(req, res, next) {
 
     const updated = await Task.findByPk(task.id, { include: TASK_INCLUDES });
 
-    return success(res, 200, "Task updated successfully", { data: updated });
+    return success(res, 200, taskMessages.taskUpdatedSuccessfully, { data: updated });
   } catch (err) {
     next(err);
   }
@@ -475,13 +476,13 @@ async function updateTask(req, res, next) {
 async function updateTaskStatus(req, res, next) {
   try {
     const { id } = req.params;
-    if (!id) return error(res, 400, "id is required");
+    if (!id) return error(res, 400, taskMessages.idIsRequired);
 
     const task = await Task.findByPk(id);
-    if (!task) return error(res, 404, "Task not found");
+    if (!task) return error(res, 404, taskMessages.taskNotFound);
 
     const { action, note } = req.body;
-    if (!action) return error(res, 400, "action is required");
+    if (!action) return error(res, 400, taskMessages.actionIsRequired);
 
     const actorId = req.employee.id;
     const actorLevel = req.employee.level;
@@ -493,7 +494,7 @@ async function updateTaskStatus(req, res, next) {
           return error(
             res,
             403,
-            "Only the assigned employee can submit this task",
+            taskMessages.onlyTheAssignedEmployeeCanSubmit,
           );
         }
         if (
@@ -504,10 +505,10 @@ async function updateTaskStatus(req, res, next) {
           return error(
             res,
             409,
-            `Cannot submit a task with status "${task.status}"`,
+            taskMessages.cannotSubmitATaskWithStatus(task.status),
           );
         }
-        if (!note) return error(res, 400, "note is required to submit a task");
+        if (!note) return error(res, 400, taskMessages.noteIsRequiredToSubmitA);
 
         await TaskNote.create({
           taskId: task.id,
@@ -524,14 +525,14 @@ async function updateTaskStatus(req, res, next) {
           return error(
             res,
             403,
-            "Only the task's creator or an L1 employee can accept it",
+            taskMessages.onlyTheTaskSCreatorOr,
           );
         }
         if (task.status !== "Approval") {
           return error(
             res,
             409,
-            `Cannot accept a task with status "${task.status}"`,
+            taskMessages.cannotAcceptATaskWithStatus(task.status),
           );
         }
 
@@ -551,17 +552,17 @@ async function updateTaskStatus(req, res, next) {
           return error(
             res,
             409,
-            `Cannot reassign a task with status "${task.status}"`,
+            taskMessages.cannotReassignATaskWithStatus(task.status),
           );
         }
         if (!note)
-          return error(res, 400, "note is required to reassign a task");
+          return error(res, 400, taskMessages.noteIsRequiredToReassignA);
 
         const { assignedTo, dueDate } = req.body;
         if (assignedTo !== undefined) {
           const newAssignee = await Employee.findByPk(assignedTo);
           if (!newAssignee)
-            return error(res, 404, "assignedTo employee not found");
+            return error(res, 404, taskMessages.assignedToEmployeeNotFound);
           // No level restriction here either — see createTask for why.
         }
 
@@ -585,14 +586,14 @@ async function updateTaskStatus(req, res, next) {
           return error(
             res,
             403,
-            "Only the task's creator or an L1 employee can cancel it",
+            taskMessages.onlyTheTaskSCreatorOr2,
           );
         }
         if (["Completed", "Cancelled"].includes(task.status)) {
           return error(
             res,
             409,
-            `Cannot cancel a task with status "${task.status}"`,
+            taskMessages.cannotCancelATaskWithStatus(task.status),
           );
         }
 
@@ -612,7 +613,7 @@ async function updateTaskStatus(req, res, next) {
         return error(
           res,
           400,
-          "action must be one of: submit, accept, reassign, cancel",
+          taskMessages.actionMustBeOneOfSubmit,
         );
     }
 
@@ -620,7 +621,7 @@ async function updateTaskStatus(req, res, next) {
       include: [...TASK_INCLUDES, TASK_NOTES_INCLUDE],
     });
 
-    return success(res, 200, `Task ${action} applied successfully`, {
+    return success(res, 200, taskMessages.taskAppliedSuccessfully(action), {
       data: withConversation(updated),
     });
   } catch (err) {

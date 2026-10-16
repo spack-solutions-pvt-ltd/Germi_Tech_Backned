@@ -1,5 +1,6 @@
 "use strict";
 const { Router } = require("express");
+const { notificationRoutes } = require("../constants/routes");
 const {
   getNotificationsSummary,
   getAllNotifications,
@@ -15,15 +16,15 @@ const { notificationUpload } = require("../middleWare/upload.middleware");
 
 const router = Router();
 
-router.get("/summary", getNotificationsSummary);
-router.get("/", getAllNotifications);
-router.get("/my-notifications", getMyNotifications);
-router.get("/:id", getNotificationById);
-router.get("/:id/document", downloadNotificationDocument);
-router.post("/", notificationUpload, createNotification); // files: image?, document?
-router.put("/:id", notificationUpload, updateNotification);
+router.get(notificationRoutes.summary, getNotificationsSummary);
+router.get(notificationRoutes.root, getAllNotifications);
+router.get(notificationRoutes.myNotifications, getMyNotifications);
+router.get(notificationRoutes.byId, getNotificationById);
+router.get(notificationRoutes.documentById, downloadNotificationDocument);
+router.post(notificationRoutes.root, notificationUpload, createNotification); // files: image?, document?
+router.put(notificationRoutes.byId, notificationUpload, updateNotification);
 
-router.get("/:notificationId/responses", getResponsesByNotification);
-router.post("/:notificationId/responses", createNotificationResponse);
+router.get(notificationRoutes.responsesByNotificationId, getResponsesByNotification);
+router.post(notificationRoutes.responsesByNotificationId, createNotificationResponse);
 
 module.exports = router;

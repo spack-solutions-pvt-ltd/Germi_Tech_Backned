@@ -47,6 +47,7 @@ const {
   validateCreatePayments,
   pickAmounts,
 } = require("../validators/loadingRequestValidator");
+const { loadingRequestsMessages } = require("../constants/message/loadingRequestsMessages");
 
 const OPEN_STATUSES = ["pending", "verified", "partially_approved"];
 const TRANSPORT_FIELDS = ["logisticsPartnerId", "rate", "marketsAmount", "kanttaBill"];
@@ -106,7 +107,7 @@ function parseEntries(raw) {
   try {
     return JSON.parse(raw);
   } catch {
-    throw httpError(400, "cropEntries must be valid JSON");
+    throw httpError(400, loadingRequestsMessages.cropEntriesMustBeValidJson);
   }
 }
 
@@ -122,7 +123,7 @@ function parseEntries(raw) {
  */
 async function buildEntries(rawEntries, requestedBy, dkFiles = [], existingEntries = []) {
   if (!Array.isArray(rawEntries) || !rawEntries.length) {
-    throw httpError(400, "At least one loading row is required");
+    throw httpError(400, loadingRequestsMessages.atLeastOneLoadingRowIs);
   }
   const explicitIndexes = rawEntries.some((e) => e.dkPhotoIndex !== undefined && e.dkPhotoIndex !== null);
   const existingByUrl = new Map(existingEntries.filter((e) => e.dkPhotoUrl).map((e) => [e.dkPhotoUrl, e]));
@@ -130,18 +131,18 @@ async function buildEntries(rawEntries, requestedBy, dkFiles = [], existingEntri
   for (const [index, entry] of rawEntries.entries()) {
     const row = `Loading ${index + 1}`;
     const allotmentVillageId = toPositiveInt(entry.allotmentVillageId);
-    if (!allotmentVillageId) throw httpError(400, `${row}: allotment is required`);
+    if (!allotmentVillageId) throw httpError(400, loadingRequestsMessages.allotmentIsRequired(row));
     const noOfBags = toPositiveInt(entry.noOfBags);
-    if (!noOfBags) throw httpError(400, `${row}: no. of bags must be a positive whole number`);
+    if (!noOfBags) throw httpError(400, loadingRequestsMessages.noOfBagsMustBeA(row));
     const dkQuantity = Number(entry.dkQuantity);
-    if (!(dkQuantity > 0)) throw httpError(400, `${row}: DK quantity must be greater than 0`);
+    if (!(dkQuantity > 0)) throw httpError(400, loadingRequestsMessages.dKQuantityMustBeGreaterThan(row));
 
     // "Self" (or nothing) = the requester; otherwise the selected supervisor.
     const supervisorId = toPositiveInt(entry.supervisorId) || requestedBy;
     const av = await AllotmentVillage.findByPk(allotmentVillageId);
-    if (!av) throw httpError(404, `${row}: allotment not found`);
+    if (!av) throw httpError(404, loadingRequestsMessages.allotmentNotFound(row));
     if (av.supervisorId !== supervisorId) {
-      throw httpError(400, `${row}: the allotment is not assigned to the selected supervisor`);
+      throw httpError(400, loadingRequestsMessages.theAllotmentIsNotAssignedTo(row));
     }
     // Closed allotments can't be picked — unless this request (on edit) already has it.
     assertAllotmentOpen(av, row, existingEntries.map((e) => e.allotmentVillageId));
@@ -149,7 +150,7 @@ async function buildEntries(rawEntries, requestedBy, dkFiles = [], existingEntri
     const fileIndex = explicitIndexes ? entry.dkPhotoIndex : index;
     const file = fileIndex !== undefined && fileIndex !== null ? dkFiles[Number(fileIndex)] : undefined;
     if (explicitIndexes && fileIndex !== undefined && fileIndex !== null && !file) {
-      throw httpError(400, `${row}: no dk_photo file at index ${fileIndex}`);
+      throw httpError(400, loadingRequestsMessages.noDkPhotoFileAtIndex(row, fileIndex));
     }
     const kept = existingByUrl.get(entry.dkPhotoUrl); // edit: keep the old photo
 
@@ -168,10 +169,10 @@ async function buildEntries(rawEntries, requestedBy, dkFiles = [], existingEntri
 
 async function validateLocations({ fromVillageId, toWarehouseId }) {
   if (fromVillageId !== undefined && !(await Village.findByPk(fromVillageId))) {
-    throw httpError(404, "From village not found");
+    throw httpError(404, loadingRequestsMessages.fromVillageNotFound);
   }
   if (toWarehouseId && !(await Warehouse.findByPk(toWarehouseId))) {
-    throw httpError(404, "To warehouse not found");
+    throw httpError(404, loadingRequestsMessages.toWarehouseNotFound);
   }
 }
 
@@ -184,13 +185,13 @@ async function applyAmounts(request, amounts, transaction) {
   const fields = Object.keys(amounts);
   if (!fields.length) return;
   if (request.transportPaymentId && fields.some((f) => TRANSPORT_FIELDS.includes(f))) {
-    throw httpError(409, "Transport payment is already created — transport amounts can't be changed");
+    throw httpError(409, loadingRequestsMessages.transportPaymentIsAlreadyCreatedTransport);
   }
   if (request.hamaliPaymentId && fields.some((f) => HAMALI_FIELDS.includes(f))) {
-    throw httpError(409, "Hamali payment is already created — hamali amount can't be changed");
+    throw httpError(409, loadingRequestsMessages.hamaliPaymentIsAlreadyCreatedHamali);
   }
   if (amounts.logisticsPartnerId && !(await LogisticsPartner.findByPk(amounts.logisticsPartnerId, { transaction }))) {
-    throw httpError(404, "Transport (logistics partner) not found");
+    throw httpError(404, loadingRequestsMessages.transportLogisticsPartnerNotFound);
   }
   await request.update(amounts, { transaction });
 }
@@ -237,7 +238,7 @@ async function assertNotViewOnly(request, employee, transaction) {
     transaction,
   });
   if (myRows) {
-    throw httpError(403, "This request includes your allotment, but it was raised by another supervisor — you can only view it");
+    throw httpError(403, loadingRequestsMessages.thisRequestIncludesYourAllotmentBut);
   }
 }
 
@@ -306,7 +307,7 @@ async function listLoadingRequests(baseWhere, req, res, next, { forSupervisor = 
 
     const response = buildPaginatedResponse(result, page, limit);
     response.data = result.rows.map((r) => decorate(r, { forSupervisor, viewerId: req.employee.id }));
-    return success(res, 200, "Loading requests fetched successfully", response);
+    return success(res, 200, loadingRequestsMessages.loadingRequestsFetchedSuccessfully, response);
   } catch (err) {
     next(err);
   }
@@ -335,7 +336,7 @@ async function getMyLoadingSummary(req, res, next) {
   try {
     // Same set as my-requests: raised by me + ones with a row for my allotment.
     const c = await summarizeByStatus(LoadingRequest, LOADING_STATUSES, myRequestsWhere(req.employee.id));
-    return success(res, 200, "Loading summary fetched successfully", {
+    return success(res, 200, loadingRequestsMessages.loadingSummaryFetchedSuccessfully, {
       data: {
         total: c.total,
         pending: c.pending,
@@ -353,7 +354,7 @@ async function getMyLoadingSummary(req, res, next) {
 async function getLoadingSummary(req, res, next) {
   try {
     const data = await summarizeByStatus(LoadingRequest, LOADING_STATUSES);
-    return success(res, 200, "Loading summary fetched successfully", { data });
+    return success(res, 200, loadingRequestsMessages.loadingSummaryFetchedSuccessfully, { data });
   } catch (err) {
     next(err);
   }
@@ -363,11 +364,11 @@ async function getLoadingSummary(req, res, next) {
 async function getLoadingRequestById(req, res, next) {
   try {
     const request = await fetchFull(req.params.id);
-    if (!request) return error(res, 404, "Loading request not found");
+    if (!request) return error(res, 404, loadingRequestsMessages.loadingRequestNotFound);
     const json = request.toJSON();
     // Supervisors (owner or row supervisor) see the collapsed L3 statuses.
     const isSupervisorView = isRequestOwner(request, req.employee) || isViewOnlyFor(json, req.employee.id);
-    return success(res, 200, "Loading request fetched successfully", {
+    return success(res, 200, loadingRequestsMessages.loadingRequestFetchedSuccessfully, {
       data: decorate(request, { forSupervisor: isSupervisorView, viewerId: req.employee.id }),
     });
   } catch (err) {
@@ -379,7 +380,7 @@ async function getLoadingRequestById(req, res, next) {
 async function getLoadingRequestPayments(req, res, next) {
   try {
     const request = await LoadingRequest.findByPk(req.params.id, { attributes: ["id"] });
-    if (!request) return error(res, 404, "Loading request not found");
+    if (!request) return error(res, 404, loadingRequestsMessages.loadingRequestNotFound);
 
     const payments = await Payment.findAll({
       where: { sourceRequestType: "loading_request", sourceRequestId: request.id },
@@ -389,7 +390,7 @@ async function getLoadingRequestPayments(req, res, next) {
       ],
       order: [["createdAt", "ASC"]],
     });
-    return success(res, 200, "Loading payments fetched successfully", {
+    return success(res, 200, loadingRequestsMessages.loadingPaymentsFetchedSuccessfully, {
       data: await attachPaymentContext(payments),
     });
   } catch (err) {
@@ -414,7 +415,7 @@ async function getLoadingRequestPayments(req, res, next) {
 async function createLoadingRequest(req, res, next) {
   try {
     const { fromVillageId, toWarehouseId, transporterName, hamaliGangName, note, requestedBy: onBehalfOf } = req.body;
-    if (!fromVillageId) return error(res, 400, "fromVillageId is required");
+    if (!fromVillageId) return error(res, 400, loadingRequestsMessages.fromVillageIdIsRequired);
 
     // Defaults to the caller; pass requestedBy to raise it for another supervisor.
     const requestedBy = await resolveRequestOwner(onBehalfOf, req.employee);
@@ -444,7 +445,7 @@ async function createLoadingRequest(req, res, next) {
       return created.id;
     });
 
-    return respond(res, 201, "Loading request created successfully", id, { forSupervisor: true });
+    return respond(res, 201, loadingRequestsMessages.loadingRequestCreatedSuccessfully, id, { forSupervisor: true });
   } catch (err) {
     next(err);
   }
@@ -458,10 +459,10 @@ async function createLoadingRequest(req, res, next) {
 async function updateLoadingRequest(req, res, next) {
   try {
     const request = await LoadingRequest.findByPk(req.params.id, { include: ENTRY_INCLUDE });
-    if (!request) return error(res, 404, "Loading request not found");
+    if (!request) return error(res, 404, loadingRequestsMessages.loadingRequestNotFound);
     assertRequestOwner(request, req.employee);
     if (request.status !== "pending") {
-      return error(res, 409, "Loading requests can only be edited while Pending");
+      return error(res, 409, loadingRequestsMessages.loadingRequestsCanOnlyBeEdited);
     }
 
     const { fromVillageId, toWarehouseId, transporterName, hamaliGangName, note } = req.body;
@@ -500,7 +501,7 @@ async function updateLoadingRequest(req, res, next) {
       }
     });
 
-    return respond(res, 200, "Loading request updated successfully", request.id, { forSupervisor: true });
+    return respond(res, 200, loadingRequestsMessages.loadingRequestUpdatedSuccessfully, request.id, { forSupervisor: true });
   } catch (err) {
     next(err);
   }
@@ -513,7 +514,7 @@ async function updateLoadingRequest(req, res, next) {
 /** Loads the request locked for update inside a transaction, or throws 404. */
 async function lockRequest(id, t) {
   const request = await LoadingRequest.findByPk(id, { transaction: t, lock: t.LOCK.UPDATE });
-  if (!request) throw httpError(404, "Loading request not found");
+  if (!request) throw httpError(404, loadingRequestsMessages.loadingRequestNotFound);
   return request;
 }
 
@@ -551,7 +552,7 @@ async function deductLoadingBags(request, entries, t) {
       const av = await AllotmentVillage.findByPk(g.allotmentVillageId, { attributes: ["allotmentVillageId"], transaction: t });
       throw httpError(
         409,
-        `Allotment ${av?.allotmentVillageId || g.allotmentVillageId}: this loading uses ${g.bags} bags but only ${balance.availableBags} are available`,
+        loadingRequestsMessages.allotmentThisLoadingUsesBagsBut(av?.allotmentVillageId || g.allotmentVillageId, g.bags, balance.availableBags),
       );
     }
     const updated = await applyBagMovement(
@@ -585,13 +586,13 @@ async function updateLoadingAmounts(req, res, next) {
       const request = await lockRequest(req.params.id, t);
       await assertNotViewOnly(request, req.employee, t); // row supervisors can only view
       if (!OPEN_STATUSES.includes(request.status)) {
-        throw httpError(409, `Amounts can't be changed on a ${request.status} request`);
+        throw httpError(409, loadingRequestsMessages.amountsCanTBeChangedOn(request.status));
       }
       await applyAmounts(request, pickAmounts(data), t);
       await syncApprovalStatus(request, t);
     });
 
-    return respond(res, 200, "Loading amounts updated successfully", req.params.id);
+    return respond(res, 200, loadingRequestsMessages.loadingAmountsUpdatedSuccessfully, req.params.id);
   } catch (err) {
     next(err);
   }
@@ -611,7 +612,7 @@ async function verifyLoadingRequest(req, res, next) {
       await assertNotViewOnly(request, req.employee, t); // row supervisors can only view
       assertNotRequestOwner(request, req.employee, "verify");
       if (request.status !== "pending") {
-        throw httpError(409, `Cannot verify a request with status "${request.status}"`);
+        throw httpError(409, loadingRequestsMessages.cannotVerifyARequestWithStatus(request.status));
       }
       await applyAmounts(request, pickAmounts(data), t);
       await request.update(
@@ -620,7 +621,7 @@ async function verifyLoadingRequest(req, res, next) {
       );
     });
 
-    return respond(res, 200, "Loading request verified successfully", req.params.id);
+    return respond(res, 200, loadingRequestsMessages.loadingRequestVerifiedSuccessfully, req.params.id);
   } catch (err) {
     next(err);
   }
@@ -636,7 +637,7 @@ async function cancelLoadingRequest(req, res, next) {
       const request = await lockRequest(req.params.id, t);
       await assertNotViewOnly(request, req.employee, t); // row supervisors can only view
       if (!["pending", "verified"].includes(request.status)) {
-        throw httpError(409, `Cannot cancel a request with status "${request.status}"`);
+        throw httpError(409, loadingRequestsMessages.cannotCancelARequestWithStatus(request.status));
       }
       await request.update(
         {
@@ -649,7 +650,7 @@ async function cancelLoadingRequest(req, res, next) {
       );
     });
 
-    return respond(res, 200, "Loading request cancelled", req.params.id);
+    return respond(res, 200, loadingRequestsMessages.loadingRequestCancelled, req.params.id);
   } catch (err) {
     next(err);
   }
@@ -668,8 +669,8 @@ async function buildLoadingPayment(type, request, amounts, approverId, t) {
   };
 
   if (type === "transport") {
-    if (!request.logisticsPartnerId) throw httpError(400, "Select the transport before creating the Transport payment");
-    if (!(amounts.transportAmount > 0)) throw httpError(400, "Transport amount must be greater than 0");
+    if (!request.logisticsPartnerId) throw httpError(400, loadingRequestsMessages.selectTheTransportBeforeCreatingThe);
+    if (!(amounts.transportAmount > 0)) throw httpError(400, loadingRequestsMessages.transportAmountMustBeGreaterThan);
     const partner = await LogisticsPartner.findByPk(request.logisticsPartnerId, { transaction: t });
     return {
       ...base,
@@ -681,8 +682,8 @@ async function buildLoadingPayment(type, request, amounts, approverId, t) {
     };
   }
 
-  if (!request.hamaliGangName) throw httpError(400, "Hamali gang name is missing on this request");
-  if (!(amounts.hamaliAmount > 0)) throw httpError(400, "Hamali amount must be greater than 0");
+  if (!request.hamaliGangName) throw httpError(400, loadingRequestsMessages.hamaliGangNameIsMissingOn);
+  if (!(amounts.hamaliAmount > 0)) throw httpError(400, loadingRequestsMessages.hamaliAmountMustBeGreaterThan);
   return {
     ...base,
     type: "hamali",
@@ -709,9 +710,9 @@ async function createLoadingPayments(req, res, next) {
       const request = await lockRequest(req.params.id, t);
       await assertNotViewOnly(request, req.employee, t); // row supervisors can only view
       assertNotRequestOwner(request, req.employee, "approve");
-      if (request.status === "approved") throw httpError(409, "All payments for this request are already created");
+      if (request.status === "approved") throw httpError(409, loadingRequestsMessages.allPaymentsForThisRequestAre);
       if (!OPEN_STATUSES.includes(request.status)) {
-        throw httpError(409, `Cannot create payments for a ${request.status} request`);
+        throw httpError(409, loadingRequestsMessages.cannotCreatePaymentsForARequest(request.status));
       }
 
       await applyAmounts(request, pickAmounts(data), t);
@@ -721,7 +722,7 @@ async function createLoadingPayments(req, res, next) {
       const types = [...new Set(data.paymentTypes)];
       const skipped = types.filter((type) => request[PAYMENT_ID_FIELD[type]]);
       const toCreate = types.filter((type) => !request[PAYMENT_ID_FIELD[type]]);
-      if (!toCreate.length) throw httpError(409, `The ${skipped.join(" and ")} payment is already created`);
+      if (!toCreate.length) throw httpError(409, loadingRequestsMessages.thePaymentIsAlreadyCreated(skipped.join(" and ")));
 
       const created = [];
       for (const type of toCreate) {
@@ -752,8 +753,8 @@ async function createLoadingPayments(req, res, next) {
       res,
       201,
       request.status === "approved"
-        ? "Payments created — loading request approved"
-        : "Payment created — loading request partially approved",
+        ? loadingRequestsMessages.paymentsCreatedLoadingRequestApproved
+        : loadingRequestsMessages.paymentCreatedLoadingRequestPartiallyApproved,
       { data: request, ...result },
     );
   } catch (err) {
@@ -777,7 +778,7 @@ async function getLoadingWarehouses(req, res, next) {
       attributes: ["id", "warehouseId", "locationName"],
       order: [["createdAt", "DESC"]],
     });
-    return success(res, 200, "Warehouses fetched successfully", { data });
+    return success(res, 200, loadingRequestsMessages.warehousesFetchedSuccessfully, { data });
   } catch (err) {
     next(err);
   }

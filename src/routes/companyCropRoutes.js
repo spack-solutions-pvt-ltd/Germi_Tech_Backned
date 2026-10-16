@@ -1,5 +1,6 @@
 "use strict";
 const { Router } = require("express");
+const { companyCropRoutes } = require("../constants/routes");
 const {
   getAllCropVarieties,
   getCropVarietyById,
@@ -10,10 +11,10 @@ const {
 
 const router = Router();
 
-router.get("/all/:companyId", getAllCropVarieties);
-router.get("/:id", getCropVarietyById);
-router.post("/", createCropVariety);
-router.put("/:id", updateCropVariety);
-router.patch("/status/:id", updateCropVarietieStatus);
+router.get(companyCropRoutes.allByCompanyId, getAllCropVarieties);
+router.get(companyCropRoutes.byId, getCropVarietyById);
+router.post(companyCropRoutes.root, createCropVariety);
+router.put(companyCropRoutes.byId, updateCropVariety);
+router.patch(companyCropRoutes.statusById, updateCropVarietieStatus);
 
 module.exports = router;

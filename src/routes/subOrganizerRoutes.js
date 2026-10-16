@@ -1,5 +1,6 @@
 "use strict";
 const { Router } = require("express");
+const { subOrganizerRoutes } = require("../constants/routes");
 const {
   getSubOrganizerSummary,
   getAllSubOrganizers,
@@ -12,11 +13,11 @@ const {
 
 const router = Router();
 
-router.get("/summary", getSubOrganizerSummary); // KPI cards — before /:id
-router.get("/", getAllSubOrganizers);
-router.get("/:id", getSubOrganizerById);
-router.post("/", createSubOrganizer);
-router.put("/:subOrganizerId", updateSubOrganizer);
-router.patch("/status/:subOrganizerId", updateSubOrganizerStatusById);
+router.get(subOrganizerRoutes.summary, getSubOrganizerSummary); // KPI cards — before /:id
+router.get(subOrganizerRoutes.root, getAllSubOrganizers);
+router.get(subOrganizerRoutes.byId, getSubOrganizerById);
+router.post(subOrganizerRoutes.root, createSubOrganizer);
+router.put(subOrganizerRoutes.bySubOrganizerId, updateSubOrganizer);
+router.patch(subOrganizerRoutes.statusBySubOrganizerId, updateSubOrganizerStatusById);
 
 module.exports = router;

@@ -9,6 +9,7 @@ const {
 } = require("../utils/pagination");
 const { success, error } = require("../utils/response");
 const { generateId } = require("../utils/generateIds");
+const { taskTypeMessages } = require("../constants/message/taskTypeMessages");
 
 /** GET /api/task-types?search=field&page=1&limit=20 */
 const getAllTaskTypes = async (req, res, next) => {
@@ -31,7 +32,7 @@ const getAllTaskTypes = async (req, res, next) => {
         where,
         order: [["createdAt", "DESC"]],
       });
-      return success(res, 200, "Task types fetched successfully", { data });
+      return success(res, 200, taskTypeMessages.taskTypesFetchedSuccessfully, { data });
     }
 
     const result = await TaskType.findAndCountAll({
@@ -44,7 +45,7 @@ const getAllTaskTypes = async (req, res, next) => {
     return success(
       res,
       200,
-      "Task types fetched successfully",
+      taskTypeMessages.taskTypesFetchedSuccessfully,
       buildPaginatedResponse(result, page, limit),
     );
   } catch (err) {
@@ -56,12 +57,12 @@ const getAllTaskTypes = async (req, res, next) => {
 const getTaskTypeById = async (req, res, next) => {
   try {
     const { id } = req.params;
-    if (!id) return error(res, 400, "id is required");
+    if (!id) return error(res, 400, taskTypeMessages.idIsRequired);
 
     const taskType = await TaskType.findByPk(id);
-    if (!taskType) return error(res, 404, "Task type not found");
+    if (!taskType) return error(res, 404, taskTypeMessages.taskTypeNotFound);
 
-    return success(res, 200, "Task type fetched successfully", {
+    return success(res, 200, taskTypeMessages.taskTypeFetchedSuccessfully, {
       data: taskType,
     });
   } catch (err) {
@@ -74,18 +75,18 @@ const createTaskType = async (req, res, next) => {
   try {
     const { name, description, status } = req.body;
 
-    if (!name) return error(res, 400, "name is required");
+    if (!name) return error(res, 400, taskTypeMessages.nameIsRequired);
     statusFilter(status); // 400 unless Active / Inactive (when sent)
 
     const existing = await TaskType.findOne({ where: { name } });
     if (existing)
-      return error(res, 409, "A task type with this name already exists");
+      return error(res, 409, taskTypeMessages.aTaskTypeWithThisName);
 
     const taskType = await TaskType.create({ name, description, status: status || "Active" });
     const taskTypeId = generateId("TT", taskType?.id);
     await taskType.update({ taskTypeId });
 
-    return success(res, 201, "Task type created successfully", {
+    return success(res, 201, taskTypeMessages.taskTypeCreatedSuccessfully, {
       data: taskType,
     });
   } catch (err) {
@@ -97,10 +98,10 @@ const createTaskType = async (req, res, next) => {
 const updateTaskType = async (req, res, next) => {
   try {
     const { id } = req.params;
-    if (!id) return error(res, 400, "id is required");
+    if (!id) return error(res, 400, taskTypeMessages.idIsRequired);
 
     const taskType = await TaskType.findByPk(id);
-    if (!taskType) return error(res, 404, "Task type not found");
+    if (!taskType) return error(res, 404, taskTypeMessages.taskTypeNotFound);
 
     const { name, description, status } = req.body;
     statusFilter(status); // 400 unless Active / Inactive (when sent)
@@ -108,7 +109,7 @@ const updateTaskType = async (req, res, next) => {
     if (name !== undefined && name !== taskType.name) {
       const existing = await TaskType.findOne({ where: { name } });
       if (existing)
-        return error(res, 409, "A task type with this name already exists");
+        return error(res, 409, taskTypeMessages.aTaskTypeWithThisName);
     }
 
     await taskType.update({
@@ -117,7 +118,7 @@ const updateTaskType = async (req, res, next) => {
       ...(status !== undefined && { status }),
     });
 
-    return success(res, 200, "Task type updated successfully", {
+    return success(res, 200, taskTypeMessages.taskTypeUpdatedSuccessfully, {
       data: taskType,
     });
   } catch (err) {

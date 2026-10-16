@@ -30,6 +30,7 @@ const {
 } = require("../utils/pagination");
 const { success, error } = require("../utils/response");
 const { generateId } = require("../utils/generateIds");
+const { logisticPartnerMessages } = require("../constants/message/logisticPartnerMessages");
 
 /**
  * GET /api/logistics?search=sri&page=1&limit=20
@@ -55,7 +56,7 @@ const getAllLogisticsPartners = async (req, res, next) => {
         attributes: ["id", "logisticsId", "name"],
         order: [["createdAt", "DESC"]],
       });
-      return success(res, 200, "Logistics partners fetched successfully", {
+      return success(res, 200, logisticPartnerMessages.logisticsPartnersFetchedSuccessfully, {
         data,
       });
     }
@@ -83,7 +84,7 @@ const getAllLogisticsPartners = async (req, res, next) => {
     return success(
       res,
       200,
-      "Logistics partners fetched successfully",
+      logisticPartnerMessages.logisticsPartnersFetchedSuccessfully,
       buildPaginatedResponse(result, page, limit),
     );
   } catch (err) {
@@ -95,12 +96,12 @@ const getAllLogisticsPartners = async (req, res, next) => {
 const getLogisticsPartnerById = async (req, res, next) => {
   try {
     const { id } = req.params;
-    if (!id) return error(res, 400, "id is required");
+    if (!id) return error(res, 400, logisticPartnerMessages.idIsRequired);
 
     const partner = await LogisticsPartner.findByPk(id, {
       include: [{ model: Vehicle, as: "vehicles" }],
     });
-    if (!partner) return error(res, 404, "Logistics partner not found");
+    if (!partner) return error(res, 404, logisticPartnerMessages.logisticsPartnerNotFound);
 
     // Details cards: trips this month + this partner's unpaid transport bills.
     const pendingBillsWhere = {
@@ -121,7 +122,7 @@ const getLogisticsPartnerById = async (req, res, next) => {
       Payment.sum("amount", { where: pendingBillsWhere }),
     ]);
 
-    return success(res, 200, "Logistics partner fetched successfully", {
+    return success(res, 200, logisticPartnerMessages.logisticsPartnerFetchedSuccessfully, {
       data: {
         ...partner.toJSON(),
         tripsThisMonth,
@@ -149,8 +150,8 @@ const createLogisticsPartner = async (req, res, next) => {
       status,
     } = req.body;
 
-    if (!name) return error(res, 400, "name is required");
-    if (!ownerName) return error(res, 400, "ownerName is required");
+    if (!name) return error(res, 400, logisticPartnerMessages.nameIsRequired);
+    if (!ownerName) return error(res, 400, logisticPartnerMessages.ownerNameIsRequired);
 
     const partner = await LogisticsPartner.create({
       name,
@@ -166,7 +167,7 @@ const createLogisticsPartner = async (req, res, next) => {
     const logisticsId = await generateId("LG", partner?.id);
     await partner?.update({ logisticsId });
 
-    return success(res, 201, "Logistics partner created successfully", {
+    return success(res, 201, logisticPartnerMessages.logisticsPartnerCreatedSuccessfully, {
       data: partner,
     });
   } catch (err) {
@@ -178,10 +179,10 @@ const createLogisticsPartner = async (req, res, next) => {
 const updateLogisticsPartner = async (req, res, next) => {
   try {
     const { id } = req.params;
-    if (!id) return error(res, 400, "id is required");
+    if (!id) return error(res, 400, logisticPartnerMessages.idIsRequired);
 
     const partner = await LogisticsPartner.findByPk(id);
-    if (!partner) return error(res, 404, "Logistics partner not found");
+    if (!partner) return error(res, 404, logisticPartnerMessages.logisticsPartnerNotFound);
 
     const {
       name,
@@ -207,7 +208,7 @@ const updateLogisticsPartner = async (req, res, next) => {
       ...(status !== undefined && { status }),
     });
 
-    return success(res, 200, "Logistics partner updated successfully", {
+    return success(res, 200, logisticPartnerMessages.logisticsPartnerUpdatedSuccessfully, {
       data: partner,
     });
   } catch (err) {
@@ -224,10 +225,10 @@ const getVehiclesByLogisticsPartnerId = async (req, res, next) => {
   try {
     const { logisticsPartnerId } = req.params;
     if (!logisticsPartnerId)
-      return error(res, 400, "logisticsPartnerId is required");
+      return error(res, 400, logisticPartnerMessages.logisticsPartnerIdIsRequired);
 
     const partner = await LogisticsPartner.findByPk(logisticsPartnerId);
-    if (!partner) return error(res, 404, "Logistics partner not found");
+    if (!partner) return error(res, 404, logisticPartnerMessages.logisticsPartnerNotFound);
 
     if (!hasPagination(req.query)) {
       const data = await Vehicle.findAll({
@@ -235,7 +236,7 @@ const getVehiclesByLogisticsPartnerId = async (req, res, next) => {
         attributes: ["id", "vehicleId", "regNo"],
         order: [["createdAt", "DESC"]],
       });
-      return success(res, 200, "Vehicles fetched successfully", { data });
+      return success(res, 200, logisticPartnerMessages.vehiclesFetchedSuccessfully, { data });
     }
 
     const { page, limit, offset } = getPagination(req.query);
@@ -249,7 +250,7 @@ const getVehiclesByLogisticsPartnerId = async (req, res, next) => {
     return success(
       res,
       200,
-      "Vehicles fetched successfully",
+      logisticPartnerMessages.vehiclesFetchedSuccessfully,
       buildPaginatedResponse(result, page, limit),
     );
   } catch (err) {
@@ -262,10 +263,10 @@ const createVehicle = async (req, res, next) => {
   try {
     const { logisticsPartnerId } = req.params;
     if (!logisticsPartnerId)
-      return error(res, 400, "logisticsPartnerId is required");
+      return error(res, 400, logisticPartnerMessages.logisticsPartnerIdIsRequired);
 
     const partner = await LogisticsPartner.findByPk(logisticsPartnerId);
-    if (!partner) return error(res, 404, "Logistics partner not found");
+    if (!partner) return error(res, 404, logisticPartnerMessages.logisticsPartnerNotFound);
 
     const { type, regNo, capacity, driverName, driverNumber } = req.body;
     // if (!type) return error(res, 400, "type is required");
@@ -282,7 +283,7 @@ const createVehicle = async (req, res, next) => {
     const vehicleId = generateId("VEH", vehicle?.id);
     await vehicle.update({ vehicleId });
 
-    return success(res, 201, "Vehicle created successfully", { data: vehicle });
+    return success(res, 201, logisticPartnerMessages.vehicleCreatedSuccessfully, { data: vehicle });
   } catch (err) {
     next(err);
   }
@@ -292,10 +293,10 @@ const createVehicle = async (req, res, next) => {
 const updateVehicle = async (req, res, next) => {
   try {
     const { vehicleId } = req.params;
-    if (!vehicleId) return error(res, 400, "vehicleId is required");
+    if (!vehicleId) return error(res, 400, logisticPartnerMessages.vehicleIdIsRequired);
 
     const vehicle = await Vehicle.findByPk(vehicleId);
-    if (!vehicle) return error(res, 404, "Vehicle not found");
+    if (!vehicle) return error(res, 404, logisticPartnerMessages.vehicleNotFound);
 
     const { type, regNo, capacity, driverName, driverNumber } = req.body;
 
@@ -307,7 +308,7 @@ const updateVehicle = async (req, res, next) => {
       ...(driverNumber !== undefined && { driverNumber }),
     });
 
-    return success(res, 200, "Vehicle updated successfully", { data: vehicle });
+    return success(res, 200, logisticPartnerMessages.vehicleUpdatedSuccessfully, { data: vehicle });
   } catch (err) {
     next(err);
   }
@@ -318,19 +319,19 @@ const getVehicleById = async (req, res, next) => {
   if (!vehicleId) {
     return res.status(400).json({
       success: false,
-      message: "vehicleId is required",
+      message: logisticPartnerMessages.vehicleIdIsRequired,
     });
   }
   const vehicle = await Vehicle.findByPk(vehicleId);
   if (!vehicle) {
     return res.status(404).json({
       success: false,
-      message: "Vehicle not found",
+      message: logisticPartnerMessages.vehicleNotFound,
     });
   }
   return res.status(200).json({
     success: true,
-    message: "Vehicle fetched successfully",
+    message: logisticPartnerMessages.vehicleFetchedSuccessfully,
     data: vehicle,
   });
 };
@@ -339,19 +340,19 @@ const updateLogisticsPartnerStatus = async (req, res, next) => {
   try {
     const { logisticsId } = req.params;
     const { status } = req.body;
-    if (!logisticsId) return error(res, 400, "logisticsId is required");
+    if (!logisticsId) return error(res, 400, logisticPartnerMessages.logisticsIdIsRequired);
 
-    if (!status) return error(res, 400, "status is required");
+    if (!status) return error(res, 400, logisticPartnerMessages.statusIsRequired);
 
     if (!["Active", "Inactive"].includes(status))
-      return error(res, 400, "Invalid status");
+      return error(res, 400, logisticPartnerMessages.invalidStatus);
 
     const logisticPartner = await LogisticsPartner.findByPk(logisticsId);
     if (!logisticPartner) {
-      return error(res, 404, "LogisticsPartner not found");
+      return error(res, 404, logisticPartnerMessages.logisticsPartnerNotFound2);
     }
     await logisticPartner.update({ status });
-    return success(res, 200, "LogisticsPartner status updated successfully");
+    return success(res, 200, logisticPartnerMessages.logisticsPartnerStatusUpdatedSuccessfully);
   } catch (err) {
     next(err);
   }
@@ -381,7 +382,7 @@ const getLogisticsSummary = async (req, res, next) => {
       Payment.sum("amount", { where: { ...transport, status: "processed" } }),
     ]);
 
-    return success(res, 200, "Logistics summary fetched successfully", {
+    return success(res, 200, logisticPartnerMessages.logisticsSummaryFetchedSuccessfully, {
       data: {
         totalPartners,
         tripsThisMonth,
@@ -448,7 +449,7 @@ async function getPartnerPaymentTotals(partnerId, season) {
 const getLogisticsPartnerPayments = async (req, res, next) => {
   try {
     const partner = await LogisticsPartner.findByPk(req.params.id, { attributes: ["id"] });
-    if (!partner) return error(res, 404, "Logistics partner not found");
+    if (!partner) return error(res, 404, logisticPartnerMessages.logisticsPartnerNotFound);
 
     const where = { ...partnerPaymentWhere(partner.id), ...paymentSeasonWhere(seasonFilter(req.query)) };
     if (["pending", "processed"].includes(req.query.status)) where.status = req.query.status;
@@ -505,7 +506,7 @@ const getLogisticsPartnerPayments = async (req, res, next) => {
     });
     response.totals = totals;
 
-    return success(res, 200, "Logistics partner payments fetched successfully", response);
+    return success(res, 200, logisticPartnerMessages.logisticsPartnerPaymentsFetchedSuccessfully, response);
   } catch (err) {
     next(err);
   }
@@ -523,7 +524,7 @@ const getLogisticsPartnerPaymentById = async (req, res, next) => {
       where: { id: req.params.paymentId, ...partnerPaymentWhere(req.params.id) },
       include: PAYMENT_PEOPLE,
     });
-    if (!payment) return error(res, 404, "Payment not found for this logistics partner");
+    if (!payment) return error(res, 404, logisticPartnerMessages.paymentNotFoundForThisLogistics);
 
     const request =
       payment.sourceRequestType === "loading_request"
@@ -543,7 +544,7 @@ const getLogisticsPartnerPaymentById = async (req, res, next) => {
         : null;
     const amounts = request ? calculateLoadingAmounts(request, request.cropEntries || []) : null;
 
-    return success(res, 200, "Logistics partner payment fetched successfully", {
+    return success(res, 200, logisticPartnerMessages.logisticsPartnerPaymentFetchedSuccessfully, {
       data: {
         id: payment.id,
         paymentCode: payment.paymentCode,

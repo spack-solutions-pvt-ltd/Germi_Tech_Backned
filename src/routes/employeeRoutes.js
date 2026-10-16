@@ -1,5 +1,6 @@
 "use strict";
 const { Router } = require("express");
+const { employeeRoutes } = require("../constants/routes");
 const {
   getEmployeeById,
   getAllEmployees,
@@ -23,31 +24,31 @@ const { employeeDocumentFileUpload } = require("../middleWare/upload.middleware"
 const router = Router();
 
 // Core
-router.get("/", getAllEmployees);
-router.get("/kpis", getEmployeeKpis);
-router.get("/:id", getEmployeeById);
-router.post("/", createEmployee);
-router.put("/:id", updateEmployee);
-router.patch("/status/:empId", updateEmployeeStatus);
+router.get(employeeRoutes.root, getAllEmployees);
+router.get(employeeRoutes.kpis, getEmployeeKpis);
+router.get(employeeRoutes.byId, getEmployeeById);
+router.post(employeeRoutes.root, createEmployee);
+router.put(employeeRoutes.byId, updateEmployee);
+router.patch(employeeRoutes.statusByEmpId, updateEmployeeStatus);
 
 // Bank account
-router.post("/:id/bank-account", updateBankAccount);
-router.put("/:id/bank-account", updateBankAccount);
+router.post(employeeRoutes.bankAccountById, updateBankAccount);
+router.put(employeeRoutes.bankAccountById, updateBankAccount);
 
 //  Documents
-router.post("/:id/documents", employeeDocumentFileUpload, addEmployeeDocument);
-router.get("/:id/documents/:documentId", getEmployeeDocument);
+router.post(employeeRoutes.documentsById, employeeDocumentFileUpload, addEmployeeDocument);
+router.get(employeeRoutes.documentsByIdAndDocumentId, getEmployeeDocument);
 router.put(
-  "/:id/documents/:documentId",
+  employeeRoutes.documentsByIdAndDocumentId,
   employeeDocumentFileUpload,
   updateEmployeeDocument,
 );
-router.get("/:id/documents/:documentId/download", downloadEmployeeDocument);
-router.delete("/:id/documents/:documentId", deleteEmployeeDocument);
+router.get(employeeRoutes.documentsDownloadByIdAndDocumentId, downloadEmployeeDocument);
+router.delete(employeeRoutes.documentsByIdAndDocumentId, deleteEmployeeDocument);
 
 //Insurance
-router.post("/:id/insurance", addEmployeeInsurance);
-router.get("/:id/insurance/:insuranceId", getEmployeeInsurance);
-router.put("/:id/insurance/:insuranceId", updateEmployeeInsurance);
+router.post(employeeRoutes.insuranceById, addEmployeeInsurance);
+router.get(employeeRoutes.insuranceByIdAndInsuranceId, getEmployeeInsurance);
+router.put(employeeRoutes.insuranceByIdAndInsuranceId, updateEmployeeInsurance);
 
 module.exports = router;

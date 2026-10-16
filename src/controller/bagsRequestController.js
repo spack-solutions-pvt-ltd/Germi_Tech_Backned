@@ -31,6 +31,7 @@ const {
   creatorFlags,
 } = require("../utils/requestOwnership");
 const { assertAllotmentOpen } = require("../utils/allotmentStatus");
+const { bagsRequestMessages } = require("../constants/message/bagsRequestMessages");
 
 // Allowed transitions. There is no Approval-page stage for bags. A request
 // can be cancelled at any stage until it is received; a "received" request
@@ -70,7 +71,7 @@ function parseCropEntries(raw) {
   try {
     return JSON.parse(raw);
   } catch {
-    throw httpError(400, "cropEntries must be valid JSON");
+    throw httpError(400, bagsRequestMessages.cropEntriesMustBeValidJson);
   }
 }
 
@@ -142,7 +143,7 @@ async function fetchFull(id) {
  */
 async function validateEntries(cropEntries, supervisorId, keepIds = []) {
   if (!Array.isArray(cropEntries) || !cropEntries.length) {
-    throw httpError(400, "At least one crop entry is required");
+    throw httpError(400, bagsRequestMessages.atLeastOneCropEntryIs);
   }
   const seen = new Set();
   const cleaned = [];
@@ -151,28 +152,28 @@ async function validateEntries(cropEntries, supervisorId, keepIds = []) {
     if (!avId)
       throw httpError(
         400,
-        "allotmentVillageId is required in every crop entry",
+        bagsRequestMessages.allotmentVillageIdIsRequiredInEveryCrop,
       );
     const requiredBags = toPositiveInt(entry.requiredBags);
     if (!requiredBags) {
       throw httpError(
         400,
-        "requiredBags must be a positive whole number in every crop entry",
+        bagsRequestMessages.requiredBagsMustBeAPositiveWhole,
       );
     }
     if (seen.has(avId))
-      throw httpError(400, `allotmentVillageId ${avId} appears more than once`);
+      throw httpError(400, bagsRequestMessages.allotmentVillageIdAppearsMoreThanOnce(avId));
     seen.add(avId);
 
     const av = await AllotmentVillage.findByPk(avId);
-    if (!av) throw httpError(404, `AllotmentVillage ${avId} not found`);
+    if (!av) throw httpError(404, bagsRequestMessages.allotmentVillageNotFound(avId));
     if (av.supervisorId !== supervisorId) {
       throw httpError(
         403,
-        `Employee ${supervisorId} is not the assigned supervisor for allotmentVillageId ${avId}`,
+        bagsRequestMessages.employeeIsNotTheAssignedSupervisor(supervisorId, avId),
       );
     }
-    assertAllotmentOpen(av, `allotmentVillageId ${avId}`, keepIds);
+    assertAllotmentOpen(av, bagsRequestMessages.allotmentVillageId(avId), keepIds);
     cleaned.push({ allotmentVillageId: avId, requiredBags });
   }
   return cleaned;
@@ -219,7 +220,7 @@ async function listBagsRequests(baseWhere, req, res, next, { viewerId } = {}) {
       // createdByMe / createdOnBehalf / canEdit — "my requests" only
       return viewerId ? { ...json, ...creatorFlags(json, viewerId) } : json;
     });
-    return success(res, 200, "Bags requests fetched successfully", response);
+    return success(res, 200, bagsRequestMessages.bagsRequestsFetchedSuccessfully, response);
   } catch (err) {
     next(err);
   }
@@ -244,15 +245,15 @@ async function getAllBagsRequests(req, res, next) {
 async function getBagsRequestById(req, res, next) {
   try {
     const request = await fetchFull(req.params.id);
-    if (!request) return error(res, 404, "Bags request not found");
+    if (!request) return error(res, 404, bagsRequestMessages.bagsRequestNotFound);
     const canView =
       isProcessor(req.employee) ||
       request.requestedBy === req.employee.id ||
       request.createdBy === req.employee.id;
     if (!canView)
-      return error(res, 403, "You don't have access to this bags request");
+      return error(res, 403, bagsRequestMessages.youDonTHaveAccessTo);
 
-    return success(res, 200, "Bags request fetched successfully", {
+    return success(res, 200, bagsRequestMessages.bagsRequestFetchedSuccessfully, {
       data: decorate(request),
     });
   } catch (err) {
@@ -285,7 +286,7 @@ async function buildSummary(where) {
 async function getMyBagsSummary(req, res, next) {
   try {
     const data = await buildSummary(myRequestsScope(req.employee.id));
-    return success(res, 200, "Bags summary fetched successfully", { data });
+    return success(res, 200, bagsRequestMessages.bagsSummaryFetchedSuccessfully, { data });
   } catch (err) {
     next(err);
   }
@@ -297,7 +298,7 @@ async function getBagsSummary(req, res, next) {
     const where = {};
     if (req.query.requestedBy) where.requestedBy = req.query.requestedBy;
     const data = await buildSummary(where);
-    return success(res, 200, "Bags summary fetched successfully", { data });
+    return success(res, 200, bagsRequestMessages.bagsSummaryFetchedSuccessfully, { data });
   } catch (err) {
     next(err);
   }
@@ -353,7 +354,7 @@ async function createBagsRequest(req, res, next) {
       return created.id;
     });
 
-    return success(res, 201, "Bags request created successfully", {
+    return success(res, 201, bagsRequestMessages.bagsRequestCreatedSuccessfully, {
       data: decorate(await fetchFull(id)),
     });
   } catch (err) {
@@ -369,10 +370,10 @@ async function createBagsRequest(req, res, next) {
 async function updateBagsRequest(req, res, next) {
   try {
     const request = await BagsRequest.findByPk(req.params.id);
-    if (!request) return error(res, 404, "Bags request not found");
+    if (!request) return error(res, 404, bagsRequestMessages.bagsRequestNotFound);
     assertRequestOwner(request, req.employee);
     if (request.status !== "pending") {
-      return error(res, 409, "Bags requests can only be edited while Pending");
+      return error(res, 409, bagsRequestMessages.bagsRequestsCanOnlyBeEdited);
     }
 
     const rawEntries = parseCropEntries(req.body.cropEntries);
@@ -406,7 +407,7 @@ async function updateBagsRequest(req, res, next) {
       }
     });
 
-    return success(res, 200, "Bags request updated successfully", {
+    return success(res, 200, bagsRequestMessages.bagsRequestUpdatedSuccessfully, {
       data: decorate(await fetchFull(request.id)),
     });
   } catch (err) {
@@ -423,24 +424,24 @@ function authorizeTransition(request, toStatus, employee) {
   if (["in_process", "bags_sent"].includes(toStatus)) {
     // The supervisor can't process their own request; an L1/L2 who raised it for them can.
     if (isRequestFor(request, employee)) {
-      return "You cannot process your own request";
+      return bagsRequestMessages.youCannotProcessYourOwnRequest;
     }
     return isProcessor(employee)
       ? null
-      : "Only L1/L2 can process and dispatch bags requests";
+      : bagsRequestMessages.onlyL1L2CanProcessAnd;
   }
   if (["received", "not_received"].includes(toStatus)) {
     // The supervisor, or whoever raised the request on their behalf.
     return isRequestOwner(request, employee)
       ? null
-      : "Only the requesting supervisor or the person who raised the request can confirm receipt";
+      : bagsRequestMessages.onlyTheRequestingSupervisorOrThe;
   }
   if (toStatus === "cancelled") {
     return isRequestOwner(request, employee) || isProcessor(employee)
       ? null
-      : "You cannot cancel this bags request";
+      : bagsRequestMessages.youCannotCancelThisBagsRequest;
   }
-  return "You cannot perform this action";
+  return bagsRequestMessages.youCannotPerformThisAction;
 }
 
 async function lockEntries(request, t) {
@@ -461,18 +462,18 @@ function applyEntryUpdates(entries, entryUpdates) {
     if (!entry)
       throw httpError(
         400,
-        `Crop entry ${update.id} does not belong to this request`,
+        bagsRequestMessages.cropEntryDoesNotBelongTo(update.id),
       );
     if (update.requiredBags !== undefined) {
       const required = toPositiveInt(update.requiredBags);
       if (!required)
-        throw httpError(400, "requiredBags must be a positive whole number");
+        throw httpError(400, bagsRequestMessages.requiredBagsMustBeAPositiveWhole2);
       entry.requiredBags = required;
     }
     if (update.sentBags !== undefined) {
       const sent = toNonNegativeInt(update.sentBags);
       if (sent === null)
-        throw httpError(400, "sentBags must be a whole number ≥ 0");
+        throw httpError(400, bagsRequestMessages.sentBagsMustBeAWholeNumber);
       entry.sentBags = sent;
     }
   }
@@ -492,10 +493,10 @@ function applyEntryUpdates(entries, entryUpdates) {
 async function updateBagsRequestStatus(req, res, next) {
   try {
     const { status: toStatus, note, reason } = req.body;
-    if (!toStatus) return error(res, 400, "status is required");
+    if (!toStatus) return error(res, 400, bagsRequestMessages.statusIsRequired);
     const entryUpdates = parseCropEntries(req.body.cropEntries);
     if (entryUpdates !== undefined && !Array.isArray(entryUpdates)) {
-      return error(res, 400, "cropEntries must be an array");
+      return error(res, 400, bagsRequestMessages.cropEntriesMustBeAnArray);
     }
 
     await sequelize.transaction(async (t) => {
@@ -503,13 +504,13 @@ async function updateBagsRequestStatus(req, res, next) {
         transaction: t,
         lock: t.LOCK.UPDATE,
       });
-      if (!request) throw httpError(404, "Bags request not found");
+      if (!request) throw httpError(404, bagsRequestMessages.bagsRequestNotFound);
 
       const fromStatus = request.status;
       if (!(STATUS_FLOW[fromStatus] || []).includes(toStatus)) {
         throw httpError(
           409,
-          `Cannot move a bags request from "${fromStatus}" to "${toStatus}"`,
+          bagsRequestMessages.cannotMoveABagsRequestFrom(fromStatus, toStatus),
         );
       }
       const denied = authorizeTransition(request, toStatus, req.employee);
@@ -534,14 +535,14 @@ async function updateBagsRequestStatus(req, res, next) {
         const entries = await lockEntries(request, t);
         if (fromStatus === "received") {
           if (!entryUpdates) {
-            throw httpError(400, "cropEntries with sentBags are required for a new dispatch");
+            throw httpError(400, bagsRequestMessages.cropEntriesWithSentbagsAreRequiredFor);
           }
           entries.forEach((e) => (e.sentBags = 0));
         }
         applyEntryUpdates(entries, entryUpdates);
         bagsCount = entries.reduce((a, e) => a + e.sentBags, 0);
         if (bagsCount <= 0) {
-          throw httpError(400, "Set sentBags (at In process or here) — at least one bag must be sent");
+          throw httpError(400, bagsRequestMessages.setSentbagsAtInProcessOr);
         }
         await Promise.all(entries.map((e) => e.save({ transaction: t })));
       }
@@ -588,7 +589,7 @@ async function updateBagsRequestStatus(req, res, next) {
       );
     });
 
-    return success(res, 200, "Bags request status updated successfully", {
+    return success(res, 200, bagsRequestMessages.bagsRequestStatusUpdatedSuccessfully, {
       data: decorate(await fetchFull(req.params.id)),
     });
   } catch (err) {

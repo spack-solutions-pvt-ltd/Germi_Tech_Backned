@@ -9,6 +9,7 @@ const {
 const { buildPermissionMap } = require("../utils/permissionMap");
 const { success, error } = require("../utils/response");
 const { generateId } = require("../utils/generateIds");
+const { roleMessages } = require("../constants/message/roleMessages");
 
 
 function serializeRole(role) {
@@ -26,7 +27,7 @@ async function getRoleKpis(req, res, next) {
         Role.count({ where: { status: "Inactive" } }),
       ]);
 
-    return success(res, 200, "Role KPIs fetched successfully", {
+    return success(res, 200, roleMessages.roleKpisFetchedSuccessfully, {
       data: { totalRoles, totalPermissions, activeRoles, inactiveRoles },
     });
   } catch (err) {
@@ -59,7 +60,7 @@ const getAllRoles = async (req, res, next) => {
         attributes: ["id", "roleId", "name"],
         order: [["createdAt", "DESC"]],
       });
-      return success(res, 200, "Roles fetched successfully", { data });
+      return success(res, 200, roleMessages.rolesFetchedSuccessfully, { data });
     }
 
     const result = await Role.findAndCountAll({
@@ -94,7 +95,7 @@ const getAllRoles = async (req, res, next) => {
     return success(
       res,
       200,
-      "Roles fetched successfully",
+      roleMessages.rolesFetchedSuccessfully,
       buildPaginatedResponse(
         {
           rows,
@@ -113,7 +114,7 @@ const getAllRoles = async (req, res, next) => {
 async function getRoleById(req, res, next) {
   try {
     const { id } = req.params;
-    if (!id) return error(res, 400, "id is required");
+    if (!id) return error(res, 400, roleMessages.idIsRequired);
 
     const role = await Role.findByPk(id, {
       include: [
@@ -126,9 +127,9 @@ async function getRoleById(req, res, next) {
       ],
     });
 
-    if (!role) return error(res, 404, "Role not found");
+    if (!role) return error(res, 404, roleMessages.roleNotFound);
 
-    return success(res, 200, "Role fetched successfully", {
+    return success(res, 200, roleMessages.roleFetchedSuccessfully, {
       data: serializeRole(role),
     });
   } catch (err) {
@@ -144,7 +145,7 @@ async function createRole(req, res, next) {
   try {
     const { name, description, status, permissionCodes = [] } = req.body;
 
-    if (!name) return error(res, 400, "name is required");
+    if (!name) return error(res, 400, roleMessages.nameIsRequired);
 
     let permissions = [];
     if (permissionCodes.length) {
@@ -160,7 +161,7 @@ async function createRole(req, res, next) {
         return error(
           res,
           404,
-          `Unknown permission code(s): ${missing.join(", ")}`,
+          roleMessages.unknownPermissionCodeS(missing.join(", ")),
         );
       }
     }
@@ -181,12 +182,12 @@ async function createRole(req, res, next) {
       include: [{ model: Permission, as: "permissions" }],
     });
 
-    return success(res, 201, "Role created successfully", {
+    return success(res, 201, roleMessages.roleCreatedSuccessfully, {
       data: serializeRole(created),
     });
   } catch (err) {
     if (err.name === "SequelizeUniqueConstraintError") {
-      return error(res, 409, "A role with this name already exists");
+      return error(res, 409, roleMessages.aRoleWithThisNameAlready);
     }
     next(err);
   }
@@ -198,10 +199,10 @@ async function createRole(req, res, next) {
 async function updateRole(req, res, next) {
   try {
     const { id } = req.params;
-    if (!id) return error(res, 400, "id is required");
+    if (!id) return error(res, 400, roleMessages.idIsRequired);
 
     const role = await Role.findByPk(id);
-    if (!role) return error(res, 404, "Role not found");
+    if (!role) return error(res, 404, roleMessages.roleNotFound);
 
     const { name, description, status, permissionCodes } = req.body;
 
@@ -217,7 +218,7 @@ async function updateRole(req, res, next) {
         return error(
           res,
           404,
-          `Unknown permission code(s): ${missing.join(", ")}`,
+          roleMessages.unknownPermissionCodeS(missing.join(", ")),
         );
       }
       await role.setPermissions(permissions);
@@ -233,12 +234,12 @@ async function updateRole(req, res, next) {
       include: [{ model: Permission, as: "permissions" }],
     });
 
-    return success(res, 200, "Role updated successfully", {
+    return success(res, 200, roleMessages.roleUpdatedSuccessfully, {
       data: serializeRole(updated),
     });
   } catch (err) {
     if (err.name === "SequelizeUniqueConstraintError") {
-      return error(res, 409, "A role with this name already exists");
+      return error(res, 409, roleMessages.aRoleWithThisNameAlready);
     }
     next(err);
   }
@@ -248,19 +249,19 @@ const updateRoleStatus = async (req, res, next) => {
   try {
     const { roleId } = req.params;
     const { status } = req.body;
-    if (!roleId) return error(res, 400, "roleId is required");
+    if (!roleId) return error(res, 400, roleMessages.roleIdIsRequired);
 
-    if (!status) return error(res, 400, "status is required");
+    if (!status) return error(res, 400, roleMessages.statusIsRequired);
 
     if (!["Active", "Inactive"].includes(status))
-      return error(res, 400, "Invalid status");
+      return error(res, 400, roleMessages.invalidStatus);
 
     const role = await Role.findByPk(roleId);
     if (!role) {
-      return error(res, 404, "Role not found");
+      return error(res, 404, roleMessages.roleNotFound);
     }
     await role.update({ status });
-    return success(res, 200, "Role status updated successfully");
+    return success(res, 200, roleMessages.roleStatusUpdatedSuccessfully);
   } catch (err) {
     next(err);
   }

@@ -1,5 +1,6 @@
 "use strict";
 const { Router } = require("express");
+const { roleRoutes } = require("../constants/routes");
 const {
   getAllRoles,
   getRoleById,
@@ -12,11 +13,11 @@ const {
 
 const router = Router();
 
-router.get("/", getAllRoles);
-router.get("/kpis", getRoleKpis);
-router.get("/:id", getRoleById);
-router.post("/", createRole);
-router.put("/:id", updateRole);
-router.patch("/status/:roleId", updateRoleStatus);
+router.get(roleRoutes.root, getAllRoles);
+router.get(roleRoutes.kpis, getRoleKpis);
+router.get(roleRoutes.byId, getRoleById);
+router.post(roleRoutes.root, createRole);
+router.put(roleRoutes.byId, updateRole);
+router.patch(roleRoutes.statusByRoleId, updateRoleStatus);
 
 module.exports = router;

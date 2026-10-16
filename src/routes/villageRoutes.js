@@ -1,5 +1,6 @@
 "use strict";
 const { Router } = require("express");
+const { villageRoutes } = require("../constants/routes");
 const {
   getVillageSummary,
   getAllVillages,
@@ -14,14 +15,14 @@ const {
 
 const router = Router();
 
-router.post("/", createVillage);
-router.get("/summary", getVillageSummary); // KPI cards — before /:villageId
-router.get("/", getAllVillages);
-router.get("/:villageId", getVillageById);
-router.put("/:villageId", updateVillage);
-router.patch("/status/:villageId", updatevillageStatusById);
+router.post(villageRoutes.root, createVillage);
+router.get(villageRoutes.summary, getVillageSummary); // KPI cards — before /:villageId
+router.get(villageRoutes.root, getAllVillages);
+router.get(villageRoutes.byVillageId, getVillageById);
+router.put(villageRoutes.byVillageId, updateVillage);
+router.patch(villageRoutes.statusByVillageId, updatevillageStatusById);
 
 // to get sub organizers of a particular village
-router.get("/:villageId/sub-organizers", getSubOrganizersByVillageId);
+router.get(villageRoutes.subOrganizersByVillageId, getSubOrganizersByVillageId);
 
 module.exports = router;

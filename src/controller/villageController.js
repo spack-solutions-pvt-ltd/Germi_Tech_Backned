@@ -16,6 +16,7 @@ const {
 } = require("../utils/pagination");
 const { success, error } = require("../utils/response");
 const { generateId } = require("../utils/generateIds");
+const { villageMessages } = require("../constants/message/villageMessages");
 
 /** GET /api/villages?search=kondapur&page=1&limit=20 */
 const getAllVillages = async (req, res, next) => {
@@ -39,7 +40,7 @@ const getAllVillages = async (req, res, next) => {
         attributes: ["id", "villageId", "name"],
         order: [["createdAt", "DESC"]],
       });
-      return success(res, 200, "Villages fetched successfully", { data });
+      return success(res, 200, villageMessages.villagesFetchedSuccessfully, { data });
     }
 
     const result = await Village.findAndCountAll({
@@ -76,7 +77,7 @@ const getAllVillages = async (req, res, next) => {
     return success(
       res,
       200,
-      "Villages fetched successfully",
+      villageMessages.villagesFetchedSuccessfully,
       buildPaginatedResponse(
         { rows: rowsWithTotals, count: result.count },
         page,
@@ -92,7 +93,7 @@ const getAllVillages = async (req, res, next) => {
 const getVillageById = async (req, res, next) => {
   try {
     const { villageId } = req.params;
-    if (!villageId) return error(res, 400, "villageId is required");
+    if (!villageId) return error(res, 400, villageMessages.villageIdIsRequired);
 
     const village = await Village.findByPk(villageId, {
       include: [
@@ -106,7 +107,7 @@ const getVillageById = async (req, res, next) => {
       ],
     });
 
-    if (!village) return error(res, 404, "Village not found");
+    if (!village) return error(res, 404, villageMessages.villageNotFound);
 
     // Acres mapped + assigned supervisors, from this village's allotments
     // (open allotments by default; ?season=&year= for one season).
@@ -142,7 +143,7 @@ const getVillageById = async (req, res, next) => {
       supervisors.set(av.supervisorId, entry);
     }
 
-    return success(res, 200, "Village fetched successfully", {
+    return success(res, 200, villageMessages.villageFetchedSuccessfully, {
       data: {
         ...village.toJSON(),
         acresMapped: allotmentVillages.reduce(
@@ -163,7 +164,7 @@ const createVillage = async (req, res, next) => {
   try {
     const { name, mandal, district, pincode, status } = req.body;
 
-    if (!name) return error(res, 400, "village name is required");
+    if (!name) return error(res, 400, villageMessages.villageNameIsRequired);
 
     const village = await Village.create({
       name,
@@ -176,7 +177,7 @@ const createVillage = async (req, res, next) => {
     const villageId = generateId("VLG", village?.id);
     await village?.update({ villageId });
 
-    return success(res, 201, "Village created successfully", { data: village });
+    return success(res, 201, villageMessages.villageCreatedSuccessfully, { data: village });
   } catch (err) {
     next(err);
   }
@@ -186,10 +187,10 @@ const createVillage = async (req, res, next) => {
 const updateVillage = async (req, res, next) => {
   try {
     const { villageId } = req.params;
-    if (!villageId) return error(res, 400, "villageId is required");
+    if (!villageId) return error(res, 400, villageMessages.villageIdIsRequired);
 
     const village = await Village.findByPk(villageId);
-    if (!village) return error(res, 404, "Village not found");
+    if (!village) return error(res, 404, villageMessages.villageNotFound);
 
     const { name, mandal, district, pincode } = req.body;
 
@@ -202,7 +203,7 @@ const updateVillage = async (req, res, next) => {
       updatedAt: Date.now(),
     });
 
-    return success(res, 200, "Village updated successfully", { data: village });
+    return success(res, 200, villageMessages.villageUpdatedSuccessfully, { data: village });
   } catch (err) {
     next(err);
   }
@@ -214,16 +215,16 @@ const updatevillageStatusById = async (req, res, next) => {
     if (!villageId)
       return res
         .status(400)
-        .json({ status: false, message: "villageId is required" });
+        .json({ status: false, message: villageMessages.villageIdIsRequired });
     const village = await Village.findByPk(villageId);
     if (!village)
       return res
         .status(404)
-        .json({ success: false, message: "Village not found" });
+        .json({ success: false, message: villageMessages.villageNotFound });
     await village.update({ status: req.body.status });
     return res
       .status(200)
-      .json({ success: true, message: "Status updated successfully!" });
+      .json({ success: true, message: villageMessages.statusUpdatedSuccessfully });
   } catch (error) {
     next(error);
   }
@@ -245,7 +246,7 @@ const getVillageSummary = async (req, res, next) => {
         SubOrganizer.sum("acres"),
       ]);
 
-    return success(res, 200, "Village summary fetched successfully", {
+    return success(res, 200, villageMessages.villageSummaryFetchedSuccessfully, {
       data: {
         totalVillages,
         activeVillages: totalVillages - inactiveVillages,

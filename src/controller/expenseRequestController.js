@@ -10,6 +10,7 @@ const { createSummaryHandlers } = require("../utils/statusSummary");
 const { myRequestsScope, withCreatorFlags } = require("../utils/requestOwnership");
 const { createPaymentIfNeeded } = require("../utils/createPayment");
 const { Op } = require("sequelize");
+const { expenseRequestMessages } = require("../constants/message/expenseRequestMessages");
 
 const INCLUDES = [
   {
@@ -50,7 +51,7 @@ async function listExpenseRequests(where, req, res, next, { viewerId } = {}) {
 
     const response = buildPaginatedResponse(result, page, limit);
     if (viewerId) response.data = withCreatorFlags(result.rows, viewerId); // createdByMe / createdOnBehalf / canEdit
-    return success(res, 200, "Expense requests fetched successfully", response);
+    return success(res, 200, expenseRequestMessages.expenseRequestsFetchedSuccessfully, response);
   } catch (err) {
     next(err);
   }
@@ -77,12 +78,12 @@ async function getAllExpenseRequests(req, res, next) {
 const getExpenseRequestById = async (req, res, next) => {
   try {
     const { id } = req.params;
-    if (!id) return error(res, 400, "id is required");
+    if (!id) return error(res, 400, expenseRequestMessages.idIsRequired);
 
     const request = await ExpenseRequest.findByPk(id, { include: INCLUDES });
-    if (!request) return error(res, 404, "Expense request not found");
+    if (!request) return error(res, 404, expenseRequestMessages.expenseRequestNotFound);
 
-    return success(res, 200, "Expense request fetched successfully", {
+    return success(res, 200, expenseRequestMessages.expenseRequestFetchedSuccessfully, {
       data: request,
     });
   } catch (err) {
@@ -99,8 +100,8 @@ async function createExpenseRequest(req, res, next) {
   try {
     const { purpose, amount, note } = req.body;
 
-    if (!purpose) return error(res, 400, "purpose is required");
-    if (!amount) return error(res, 400, "amount is required");
+    if (!purpose) return error(res, 400, expenseRequestMessages.purposeIsRequired);
+    if (!amount) return error(res, 400, expenseRequestMessages.amountIsRequired);
 
     let requestedBy = req.employee.id;
     const { requestedBy: onBehalfOf } = req.body;
@@ -109,12 +110,12 @@ async function createExpenseRequest(req, res, next) {
         return error(
           res,
           403,
-          "Only L1 or L2 employees can create a request on behalf of someone else",
+          expenseRequestMessages.onlyL1OrL2EmployeesCan,
         );
       }
       const targetEmployee = await Employee.findByPk(onBehalfOf);
       if (!targetEmployee)
-        return error(res, 404, "requestedBy employee not found");
+        return error(res, 404, expenseRequestMessages.requestedByEmployeeNotFound);
       requestedBy = Number(onBehalfOf);
     }
 
@@ -136,7 +137,7 @@ async function createExpenseRequest(req, res, next) {
       include: INCLUDES,
     });
 
-    return success(res, 201, "Expense request created successfully", {
+    return success(res, 201, expenseRequestMessages.expenseRequestCreatedSuccessfully, {
       data: created,
     });
   } catch (err) {
@@ -148,16 +149,16 @@ async function createExpenseRequest(req, res, next) {
 const updateExpenseRequest = async (req, res, next) => {
   try {
     const { id } = req.params;
-    if (!id) return error(res, 400, "id is required");
+    if (!id) return error(res, 400, expenseRequestMessages.idIsRequired);
 
     const request = await ExpenseRequest.findByPk(id);
-    if (!request) return error(res, 404, "Expense request not found");
+    if (!request) return error(res, 404, expenseRequestMessages.expenseRequestNotFound);
 
     if (request.status !== "pending") {
       return error(
         res,
         409,
-        "Expense requests can only be edited while Pending (not yet verified)",
+        expenseRequestMessages.expenseRequestsCanOnlyBeEdited,
       );
     }
 
@@ -171,7 +172,7 @@ const updateExpenseRequest = async (req, res, next) => {
       ...(bill && { billUrl: bill.key }),
     });
 
-    return success(res, 200, "Expense request updated successfully", {
+    return success(res, 200, expenseRequestMessages.expenseRequestUpdatedSuccessfully, {
       data: request,
     });
   } catch (err) {
@@ -184,13 +185,13 @@ const verifyExpenseRequest = async (req, res, next) => {
   try {
     const { id } = req.params;
     const request = await ExpenseRequest.findByPk(id);
-    if (!request) return error(res, 404, "Expense request not found");
+    if (!request) return error(res, 404, expenseRequestMessages.expenseRequestNotFound);
 
     if (request.status !== "pending") {
       return error(
         res,
         409,
-        `Cannot verify a request with status "${request.status}"`,
+        expenseRequestMessages.cannotVerifyARequestWithStatus(request.status),
       );
     }
 
@@ -200,7 +201,7 @@ const verifyExpenseRequest = async (req, res, next) => {
       verifiedAt: new Date(),
     });
 
-    return success(res, 200, "Expense request verified successfully", {
+    return success(res, 200, expenseRequestMessages.expenseRequestVerifiedSuccessfully, {
       data: request,
     });
   } catch (err) {
@@ -213,13 +214,13 @@ async function approveExpenseRequest(req, res, next) {
   try {
     const { id } = req.params;
     const request = await ExpenseRequest.findByPk(id);
-    if (!request) return error(res, 404, "Expense request not found");
+    if (!request) return error(res, 404, expenseRequestMessages.expenseRequestNotFound);
 
     if (request.status !== "verified") {
       return error(
         res,
         409,
-        `Cannot approve a request with status "${request.status}"`,
+        expenseRequestMessages.cannotApproveARequestWithStatus(request.status),
       );
     }
 
@@ -241,7 +242,7 @@ async function approveExpenseRequest(req, res, next) {
 
     const updated = await ExpenseRequest.findByPk(id, { include: INCLUDES });
 
-    return success(res, 200, "Expense request approved successfully", {
+    return success(res, 200, expenseRequestMessages.expenseRequestApprovedSuccessfully, {
       data: updated,
       payment,
     });
@@ -257,13 +258,13 @@ async function rejectExpenseRequest(req, res, next) {
     const { rejectionReason } = req.body;
 
     const request = await ExpenseRequest.findByPk(id);
-    if (!request) return error(res, 404, "Expense request not found");
+    if (!request) return error(res, 404, expenseRequestMessages.expenseRequestNotFound);
 
     if (["approved", "rejected", "paid"].includes(request.status)) {
       return error(
         res,
         409,
-        `Cannot reject a request with status "${request.status}"`,
+        expenseRequestMessages.cannotRejectARequestWithStatus(request.status),
       );
     }
 
@@ -277,7 +278,7 @@ async function rejectExpenseRequest(req, res, next) {
       rejectedStage,
     });
 
-    return success(res, 200, "Expense request rejected", { data: request });
+    return success(res, 200, expenseRequestMessages.expenseRequestRejected, { data: request });
   } catch (err) {
     next(err);
   }

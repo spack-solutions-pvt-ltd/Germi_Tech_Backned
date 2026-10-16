@@ -16,6 +16,7 @@ const { success, error } = require("../utils/response");
 const { generateId } = require("../utils/generateIds");
 const { respondedBySql, getMyNotificationCounts } = require("../utils/notificationCounts");
 const { getFileUrl, isLocalFile, LOCAL_UPLOAD_ROOT } = require("../utils/s3");
+const { notificationMessages } = require("../constants/message/notificationMessages");
 const SENDER_INCLUDE = {
   model: Employee,
   as: "sender",
@@ -77,7 +78,7 @@ const getNotificationSummary = async () => {
 const getNotificationsSummary = async (req, res, next) => {
   try {
     const data = await getNotificationSummary();
-    return success(res, 200, "Notification summary fetched successfully", { data });
+    return success(res, 200, notificationMessages.notificationSummaryFetchedSuccessfully, { data });
   } catch (err) {
     next(err);
   }
@@ -130,7 +131,7 @@ const getAllNotifications = async (req, res, next) => {
       getNotificationSummary(),
     ]);
 
-    return success(res, 200, "Notifications fetched successfully", {
+    return success(res, 200, notificationMessages.notificationsFetchedSuccessfully, {
       ...buildPaginatedResponse(result, page, limit),
       summary,
     });
@@ -143,7 +144,7 @@ const getAllNotifications = async (req, res, next) => {
 const getNotificationById = async (req, res, next) => {
   try {
     const { id } = req.params;
-    if (!id) return error(res, 400, "id is required");
+    if (!id) return error(res, 400, notificationMessages.idIsRequired);
 
     const notification = await Notification.findByPk(id, {
       include: [
@@ -168,9 +169,9 @@ const getNotificationById = async (req, res, next) => {
       ],
     });
 
-    if (!notification) return error(res, 404, "Notification not found");
+    if (!notification) return error(res, 404, notificationMessages.notificationNotFound);
 
-    return success(res, 200, "Notification fetched successfully", {
+    return success(res, 200, notificationMessages.notificationFetchedSuccessfully, {
       data: {
         ...notification.toJSON(),
         responsesCount: notification.responses.length,
@@ -215,7 +216,7 @@ const getMyNotifications = async (req, res, next) => {
       return { ...json, respondedByMe: Boolean(Number(json.respondedByMe)) };
     });
     response.summary = summary;
-    return success(res, 200, "Notifications fetched successfully", response);
+    return success(res, 200, notificationMessages.notificationsFetchedSuccessfully, response);
   } catch (err) {
     next(err);
   }
@@ -230,22 +231,22 @@ const downloadNotificationDocument = async (req, res, next) => {
     const notification = await Notification.findByPk(req.params.id, {
       attributes: ["id", "documentUrl", "documentName"],
     });
-    if (!notification) return error(res, 404, "Notification not found");
+    if (!notification) return error(res, 404, notificationMessages.notificationNotFound);
     const stored = notification.getDataValue("documentUrl"); // S3 key or local /uploads path
-    if (!stored) return error(res, 404, "This notification has no document");
+    if (!stored) return error(res, 404, notificationMessages.thisNotificationHasNoDocument);
 
     // Local file: send it from disk (resolved from the file name only, so the
     // path can't escape the uploads folder).
     if (isLocalFile(stored)) {
       const filePath = path.join(LOCAL_UPLOAD_ROOT, "notifications", path.basename(stored));
-      if (!fs.existsSync(filePath)) return error(res, 404, "Document file is missing on the server");
+      if (!fs.existsSync(filePath)) return error(res, 404, notificationMessages.documentFileIsMissingOnThe);
       return res.download(filePath, notification.documentName || path.basename(stored));
     }
 
     // S3: CloudFront signed link. The file was uploaded as an attachment with
     // its original name, so the browser downloads it under that name.
     const url = getFileUrl(stored);
-    if (!url) return error(res, 503, "File links are not available yet — CloudFront is not configured");
+    if (!url) return error(res, 503, notificationMessages.fileLinksAreNotAvailableYet);
     return res.redirect(url);
   } catch (err) {
     next(err);
@@ -260,16 +261,16 @@ const downloadNotificationDocument = async (req, res, next) => {
 const createNotification = async (req, res, next) => {
   try {
     if (!req.employee) {
-      return error(res, 401, "Authentication required to send a notification");
+      return error(res, 401, notificationMessages.authenticationRequiredToSendANotification);
     }
 
     const { toLevel, message } = req.body;
 
-    if (!toLevel) return error(res, 400, "toLevel is required");
+    if (!toLevel) return error(res, 400, notificationMessages.toLevelIsRequired);
     if (!["L1", "L2", "L3", "All"].includes(toLevel)) {
-      return error(res, 400, "toLevel must be one of L1, L2, L3, All");
+      return error(res, 400, notificationMessages.toLevelMustBeOneOfL1);
     }
-    if (!message) return error(res, 400, "message is required");
+    if (!message) return error(res, 400, notificationMessages.messageIsRequired);
 
     const notification = await Notification.create({
       sentBy: req.employee.id,
@@ -290,7 +291,7 @@ const createNotification = async (req, res, next) => {
       ],
     });
 
-    return success(res, 201, "Notification sent successfully", {
+    return success(res, 201, notificationMessages.notificationSentSuccessfully, {
       data: created,
     });
   } catch (err) {
@@ -307,25 +308,25 @@ const createNotification = async (req, res, next) => {
 const updateNotification = async (req, res, next) => {
   try {
     const { id } = req.params;
-    if (!id) return error(res, 400, "id is required");
+    if (!id) return error(res, 400, notificationMessages.idIsRequired);
 
     const notification = await Notification.findByPk(id, {
       include: [{ model: NotificationResponse, as: "responses" }],
     });
-    if (!notification) return error(res, 404, "Notification not found");
+    if (!notification) return error(res, 404, notificationMessages.notificationNotFound);
 
     if (notification.responses.length > 0) {
       return error(
         res,
         409,
-        "Cannot edit a notification that already has responses",
+        notificationMessages.cannotEditANotificationThatAlready,
       );
     }
 
     const { toLevel, message } = req.body;
 
     if (toLevel !== undefined && !["L1", "L2", "L3", "All"].includes(toLevel)) {
-      return error(res, 400, "toLevel must be one of L1, L2, L3, All");
+      return error(res, 400, notificationMessages.toLevelMustBeOneOfL1);
     }
 
     await notification.update({
@@ -334,7 +335,7 @@ const updateNotification = async (req, res, next) => {
       ...attachmentFields(req.files), // a new image/document replaces the old one
     });
 
-    return success(res, 200, "Notification updated successfully", {
+    return success(res, 200, notificationMessages.notificationUpdatedSuccessfully, {
       data: notification,
     });
   } catch (err) {
@@ -346,10 +347,10 @@ const updateNotification = async (req, res, next) => {
 const getResponsesByNotification = async (req, res, next) => {
   try {
     const { notificationId } = req.params;
-    if (!notificationId) return error(res, 400, "notificationId is required");
+    if (!notificationId) return error(res, 400, notificationMessages.notificationIdIsRequired);
 
     const notification = await Notification.findByPk(notificationId);
-    if (!notification) return error(res, 404, "Notification not found");
+    if (!notification) return error(res, 404, notificationMessages.notificationNotFound);
 
     const { page, limit, offset } = getPagination(req.query);
 
@@ -370,7 +371,7 @@ const getResponsesByNotification = async (req, res, next) => {
     return success(
       res,
       200,
-      "Notification responses fetched successfully",
+      notificationMessages.notificationResponsesFetchedSuccessfully,
       buildPaginatedResponse(result, page, limit),
     );
   } catch (err) {
@@ -387,18 +388,18 @@ const createNotificationResponse = async (req, res, next) => {
       return error(
         res,
         401,
-        "Authentication required to respond to a notification",
+        notificationMessages.authenticationRequiredToRespondToA,
       );
     }
 
     const { notificationId } = req.params;
-    if (!notificationId) return error(res, 400, "notificationId is required");
+    if (!notificationId) return error(res, 400, notificationMessages.notificationIdIsRequired);
 
     const notification = await Notification.findByPk(notificationId);
-    if (!notification) return error(res, 404, "Notification not found");
+    if (!notification) return error(res, 404, notificationMessages.notificationNotFound);
 
     const { message } = req.body;
-    if (!message) return error(res, 400, "message is required");
+    if (!message) return error(res, 400, notificationMessages.messageIsRequired);
 
     const response = await NotificationResponse.create({
       notificationId,
@@ -416,7 +417,7 @@ const createNotificationResponse = async (req, res, next) => {
       ],
     });
 
-    return success(res, 201, "Response submitted successfully", {
+    return success(res, 201, notificationMessages.responseSubmittedSuccessfully, {
       data: created,
     });
   } catch (err) {

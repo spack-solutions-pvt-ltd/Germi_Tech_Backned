@@ -1,5 +1,6 @@
 "use strict";
 const { Router } = require("express");
+const { bagRequestsRoutes } = require("../constants/routes");
 const {
   getMyBagsRequests,
   getAllBagsRequests,
@@ -13,13 +14,13 @@ const {
 
 const router = Router();
 
-router.get("/my-requests", getMyBagsRequests);
-router.get("/my-summary", getMyBagsSummary);
-router.get("/summary", getBagsSummary); 
-router.get("/", getAllBagsRequests); 
-router.get("/:id", getBagsRequestById);
-router.post("/", createBagsRequest); 
-router.put("/:id", updateBagsRequest);
-router.put("/:id/status", updateBagsRequestStatus);
+router.get(bagRequestsRoutes.myRequests, getMyBagsRequests);
+router.get(bagRequestsRoutes.mySummary, getMyBagsSummary);
+router.get(bagRequestsRoutes.summary, getBagsSummary); 
+router.get(bagRequestsRoutes.root, getAllBagsRequests); 
+router.get(bagRequestsRoutes.byId, getBagsRequestById);
+router.post(bagRequestsRoutes.root, createBagsRequest); 
+router.put(bagRequestsRoutes.byId, updateBagsRequest);
+router.put(bagRequestsRoutes.statusById, updateBagsRequestStatus);
 
 module.exports = router;

@@ -60,8 +60,8 @@ router.get(indexRoutes.states, authenticate, getAllStates);
 router.get(indexRoutes.allFields, authenticate, getAllNames);
 // Allotment-villages of a supervisor: ?supervisorId= or /:supervisorId (default: logged-in user)
 router.get(indexRoutes.allotmentVillages, authenticate, getAllotmentVillagesBySupervisor);
-router.get(`${indexRoutes.allotmentVillages}/:supervisorId`, authenticate, getAllotmentVillagesBySupervisor);
+router.get(indexRoutes.allotmentVillagesBySupervisorId, authenticate, getAllotmentVillagesBySupervisor);
 // Assigned supervisor records standing acres: body { standingAcres }
-router.patch(`${indexRoutes.allotmentVillages}/:villageAllotmentId/standing-acres`, authenticate, updateStandingAcres);
+router.patch(indexRoutes.allotmentVillageStandingAcres, authenticate, updateStandingAcres);
 
 module.exports = router;

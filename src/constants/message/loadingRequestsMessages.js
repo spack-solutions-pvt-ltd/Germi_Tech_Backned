@@ -1,0 +1,48 @@
+"use strict";
+
+// Response messages for controller/loadingRequestsController.js.
+// Functions build messages that include values (counts, codes, statuses).
+const loadingRequestsMessages = {
+  cropEntriesMustBeValidJson: "cropEntries must be valid JSON",
+  atLeastOneLoadingRowIs: "At least one loading row is required",
+  allotmentIsRequired: (row) => `${row}: allotment is required`,
+  noOfBagsMustBeA: (row) => `${row}: no. of bags must be a positive whole number`,
+  dKQuantityMustBeGreaterThan: (row) => `${row}: DK quantity must be greater than 0`,
+  allotmentNotFound: (row) => `${row}: allotment not found`,
+  theAllotmentIsNotAssignedTo: (row) => `${row}: the allotment is not assigned to the selected supervisor`,
+  noDkPhotoFileAtIndex: (row, fileIndex) => `${row}: no dk_photo file at index ${fileIndex}`,
+  fromVillageNotFound: "From village not found",
+  toWarehouseNotFound: "To warehouse not found",
+  transportPaymentIsAlreadyCreatedTransport: "Transport payment is already created — transport amounts can't be changed",
+  hamaliPaymentIsAlreadyCreatedHamali: "Hamali payment is already created — hamali amount can't be changed",
+  transportLogisticsPartnerNotFound: "Transport (logistics partner) not found",
+  thisRequestIncludesYourAllotmentBut: "This request includes your allotment, but it was raised by another supervisor — you can only view it",
+  loadingRequestsFetchedSuccessfully: "Loading requests fetched successfully",
+  loadingSummaryFetchedSuccessfully: "Loading summary fetched successfully",
+  loadingRequestNotFound: "Loading request not found",
+  loadingRequestFetchedSuccessfully: "Loading request fetched successfully",
+  loadingPaymentsFetchedSuccessfully: "Loading payments fetched successfully",
+  fromVillageIdIsRequired: "fromVillageId is required",
+  loadingRequestCreatedSuccessfully: "Loading request created successfully",
+  loadingRequestsCanOnlyBeEdited: "Loading requests can only be edited while Pending",
+  loadingRequestUpdatedSuccessfully: "Loading request updated successfully",
+  allotmentThisLoadingUsesBagsBut: (value, bags, availableBags) => `Allotment ${value}: this loading uses ${bags} bags but only ${availableBags} are available`,
+  amountsCanTBeChangedOn: (status) => `Amounts can't be changed on a ${status} request`,
+  loadingAmountsUpdatedSuccessfully: "Loading amounts updated successfully",
+  cannotVerifyARequestWithStatus: (status) => `Cannot verify a request with status "${status}"`,
+  loadingRequestVerifiedSuccessfully: "Loading request verified successfully",
+  cannotCancelARequestWithStatus: (status) => `Cannot cancel a request with status "${status}"`,
+  loadingRequestCancelled: "Loading request cancelled",
+  selectTheTransportBeforeCreatingThe: "Select the transport before creating the Transport payment",
+  transportAmountMustBeGreaterThan: "Transport amount must be greater than 0",
+  hamaliGangNameIsMissingOn: "Hamali gang name is missing on this request",
+  hamaliAmountMustBeGreaterThan: "Hamali amount must be greater than 0",
+  allPaymentsForThisRequestAre: "All payments for this request are already created",
+  cannotCreatePaymentsForARequest: (status) => `Cannot create payments for a ${status} request`,
+  thePaymentIsAlreadyCreated: (skipped) => `The ${skipped} payment is already created`,
+  paymentsCreatedLoadingRequestApproved: "Payments created — loading request approved",
+  paymentCreatedLoadingRequestPartiallyApproved: "Payment created — loading request partially approved",
+  warehousesFetchedSuccessfully: "Warehouses fetched successfully",
+};
+
+module.exports = { loadingRequestsMessages };

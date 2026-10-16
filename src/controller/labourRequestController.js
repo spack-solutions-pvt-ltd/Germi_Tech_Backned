@@ -21,6 +21,7 @@ const { createSummaryHandlers } = require("../utils/statusSummary");
 const { myRequestsScope, withCreatorFlags } = require("../utils/requestOwnership");
 const { createPaymentIfNeeded } = require("../utils/createPayment");
 const { calculateLabourCost } = require("../utils/labourCost");
+const { labourRequestMessages } = require("../constants/message/labourRequestMessages");
 
 const ENTRY_INCLUDE = {
   model: LabourRequestCropEntry,
@@ -152,7 +153,7 @@ async function listLabourRequests(baseWhere, req, res, next, { viewerId } = {}) 
 
     const response = buildPaginatedResponse(result, page, limit);
     if (viewerId) response.data = withCreatorFlags(result.rows, viewerId); // createdByMe / createdOnBehalf / canEdit
-    return success(res, 200, "Labour requests fetched successfully", response);
+    return success(res, 200, labourRequestMessages.labourRequestsFetchedSuccessfully, response);
   } catch (err) {
     next(err);
   }
@@ -179,16 +180,16 @@ async function getAllLabourRequests(req, res, next) {
 async function getLabourRequestById(req, res, next) {
   try {
     const { id } = req.params;
-    if (!id) return error(res, 400, "id is required");
+    if (!id) return error(res, 400, labourRequestMessages.idIsRequired);
 
     const request = await LabourRequest.findByPk(id, {
       include: [...HEADER_INCLUDES, ENTRY_INCLUDE],
     });
-    if (!request) return error(res, 404, "Labour request not found");
+    if (!request) return error(res, 404, labourRequestMessages.labourRequestNotFound);
 
     const cost = await calculateLabourCost(request);
 
-    return success(res, 200, "Labour request fetched successfully", {
+    return success(res, 200, labourRequestMessages.labourRequestFetchedSuccessfully, {
       data: {
         ...request.toJSON(),
         cost,
@@ -226,7 +227,7 @@ async function createLabourRequest(req, res, next) {
           ? JSON.parse(req.body.cropEntries)
           : req.body.cropEntries;
     } catch {
-      return error(res, 400, "cropEntries must be valid JSON");
+      return error(res, 400, labourRequestMessages.cropEntriesMustBeValidJson);
     }
     cropEntries = cropEntries || [];
 
@@ -234,17 +235,17 @@ async function createLabourRequest(req, res, next) {
       return error(
         res,
         400,
-        "Either laborGroupId or otherLaborGroupName is required",
+        labourRequestMessages.eitherLaborgroupidOrOtherlaborgroupnameIsRequired,
       );
     }
-    if (!fromLocation) return error(res, 400, "fromLocation is required");
-    if (!toLocation) return error(res, 400, "toLocation is required");
+    if (!fromLocation) return error(res, 400, labourRequestMessages.fromLocationIsRequired);
+    if (!toLocation) return error(res, 400, labourRequestMessages.toLocationIsRequired);
     if (!cropEntries.length)
-      return error(res, 400, "At least one crop entry is required");
+      return error(res, 400, labourRequestMessages.atLeastOneCropEntryIs);
 
     if (laborGroupId) {
       const laborGroup = await LaborGroup.findByPk(laborGroupId);
-      if (!laborGroup) return error(res, 404, "Labor group not found");
+      if (!laborGroup) return error(res, 404, labourRequestMessages.laborGroupNotFound);
     }
 
     // Resolve who this request is FOR. Defaults to the caller; an L1/L2 can
@@ -256,12 +257,12 @@ async function createLabourRequest(req, res, next) {
         return error(
           res,
           403,
-          "Only L1 or L2 employees can create a request on behalf of someone else",
+          labourRequestMessages.onlyL1OrL2EmployeesCan,
         );
       }
       const targetEmployee = await Employee.findByPk(onBehalfOf);
       if (!targetEmployee)
-        return error(res, 404, "requestedBy employee not found");
+        return error(res, 404, labourRequestMessages.requestedByEmployeeNotFound);
       requestedBy = Number(onBehalfOf);
     }
 
@@ -272,30 +273,30 @@ async function createLabourRequest(req, res, next) {
         return error(
           res,
           400,
-          "allotmentVillageId is required in every crop entry",
+          labourRequestMessages.allotmentVillageIdIsRequiredInEveryCrop,
         );
       if (!entry.labourCount)
-        return error(res, 400, "labourCount is required in every crop entry");
+        return error(res, 400, labourRequestMessages.labourCountIsRequiredInEveryCrop);
 
       const av = await AllotmentVillage.findByPk(entry.allotmentVillageId);
       if (!av)
         return error(
           res,
           404,
-          `AllotmentVillage ${entry.allotmentVillageId} not found`,
+          labourRequestMessages.allotmentVillageNotFound(entry.allotmentVillageId),
         );
       if (av.supervisorId !== requestedBy) {
         return error(
           res,
           403,
-          `Employee ${requestedBy} is not the assigned supervisor for allotmentVillageId ${entry.allotmentVillageId}`,
+          labourRequestMessages.employeeIsNotTheAssignedSupervisor(requestedBy, entry.allotmentVillageId),
         );
       }
       if (av.status === "closed") {
         return error(
           res,
           400,
-          `allotmentVillageId ${entry.allotmentVillageId}: this allotment is closed — choose an open allotment`,
+          labourRequestMessages.allotmentVillageIdThisAllotmentIsClosedChoose(entry.allotmentVillageId),
         );
       }
     }
@@ -338,7 +339,7 @@ async function createLabourRequest(req, res, next) {
       include: [...HEADER_INCLUDES, ENTRY_INCLUDE],
     });
 
-    return success(res, 201, "Labour request created successfully", {
+    return success(res, 201, labourRequestMessages.labourRequestCreatedSuccessfully, {
       data: created,
     });
   } catch (err) {
@@ -356,16 +357,16 @@ async function createLabourRequest(req, res, next) {
 async function updateLabourRequest(req, res, next) {
   try {
     const { id } = req.params;
-    if (!id) return error(res, 400, "id is required");
+    if (!id) return error(res, 400, labourRequestMessages.idIsRequired);
 
     const request = await LabourRequest.findByPk(id);
-    if (!request) return error(res, 404, "Labour request not found");
+    if (!request) return error(res, 404, labourRequestMessages.labourRequestNotFound);
 
     if (request.status !== "pending") {
       return error(
         res,
         409,
-        "Labour requests can only be edited while Pending (not yet verified)",
+        labourRequestMessages.labourRequestsCanOnlyBeEdited,
       );
     }
 
@@ -380,7 +381,7 @@ async function updateLabourRequest(req, res, next) {
 
     if (laborGroupId !== undefined) {
       const laborGroup = await LaborGroup.findByPk(laborGroupId);
-      if (!laborGroup) return error(res, 404, "Labor group not found");
+      if (!laborGroup) return error(res, 404, labourRequestMessages.laborGroupNotFound);
     }
 
     let cropEntries;
@@ -391,7 +392,7 @@ async function updateLabourRequest(req, res, next) {
             ? JSON.parse(req.body.cropEntries)
             : req.body.cropEntries;
       } catch {
-        return error(res, 400, "cropEntries must be valid JSON");
+        return error(res, 400, labourRequestMessages.cropEntriesMustBeValidJson);
       }
 
       // Allotments this request already has stay allowed even if closed since.
@@ -407,30 +408,30 @@ async function updateLabourRequest(req, res, next) {
           return error(
             res,
             400,
-            "allotmentVillageId is required in every crop entry",
+            labourRequestMessages.allotmentVillageIdIsRequiredInEveryCrop,
           );
         if (!entry.labourCount)
-          return error(res, 400, "labourCount is required in every crop entry");
+          return error(res, 400, labourRequestMessages.labourCountIsRequiredInEveryCrop);
 
         const av = await AllotmentVillage.findByPk(entry.allotmentVillageId);
         if (!av)
           return error(
             res,
             404,
-            `AllotmentVillage ${entry.allotmentVillageId} not found`,
+            labourRequestMessages.allotmentVillageNotFound(entry.allotmentVillageId),
           );
         if (av.supervisorId !== request.requestedBy) {
           return error(
             res,
             403,
-            `Not the assigned supervisor for allotmentVillageId ${entry.allotmentVillageId}`,
+            labourRequestMessages.notTheAssignedSupervisorForAllotmentvillageid(entry.allotmentVillageId),
           );
         }
         if (av.status === "closed" && !keepIds.includes(av.id)) {
           return error(
             res,
             400,
-            `allotmentVillageId ${entry.allotmentVillageId}: this allotment is closed — choose an open allotment`,
+            labourRequestMessages.allotmentVillageIdThisAllotmentIsClosedChoose(entry.allotmentVillageId),
           );
         }
       }
@@ -474,7 +475,7 @@ async function updateLabourRequest(req, res, next) {
       include: [...HEADER_INCLUDES, ENTRY_INCLUDE],
     });
 
-    return success(res, 200, "Labour request updated successfully", {
+    return success(res, 200, labourRequestMessages.labourRequestUpdatedSuccessfully, {
       data: updated,
     });
   } catch (err) {
@@ -500,13 +501,13 @@ async function verifyLabourRequest(req, res, next) {
   try {
     const { id } = req.params;
     const request = await LabourRequest.findByPk(id);
-    if (!request) return error(res, 404, "Labour request not found");
+    if (!request) return error(res, 404, labourRequestMessages.labourRequestNotFound);
 
     if (request.status !== "pending") {
       return error(
         res,
         409,
-        `Cannot verify a request with status "${request.status}"`,
+        labourRequestMessages.cannotVerifyARequestWithStatus(request.status),
       );
     }
 
@@ -519,7 +520,7 @@ async function verifyLabourRequest(req, res, next) {
 
     const parsedTransportCost = parseTransportCost(transportCost);
     if (parsedTransportCost === null) {
-      return error(res, 400, "transportCost must be a number ≥ 0");
+      return error(res, 400, labourRequestMessages.transportCostMustBeANumber0);
     }
     if (parsedTransportCost !== undefined) {
       updates.transportCost = parsedTransportCost;
@@ -530,12 +531,12 @@ async function verifyLabourRequest(req, res, next) {
         return error(
           res,
           409,
-          "This request already has a real labor group assigned — nothing to resolve",
+          labourRequestMessages.thisRequestAlreadyHasAReal,
         );
       }
 
       const laborGroup = await LaborGroup.findByPk(laborGroupId);
-      if (!laborGroup) return error(res, 404, "Labor group not found");
+      if (!laborGroup) return error(res, 404, labourRequestMessages.laborGroupNotFound);
 
       updates.laborGroupId = laborGroupId;
       updates.otherLaborGroupName = null; // resolved — the free-text name is no longer needed
@@ -548,7 +549,7 @@ async function verifyLabourRequest(req, res, next) {
     });
     const cost = await calculateLabourCost(updated);
 
-    return success(res, 200, "Labour request verified successfully", {
+    return success(res, 200, labourRequestMessages.labourRequestVerifiedSuccessfully, {
       data: updated,
       cost,
     });
@@ -572,19 +573,19 @@ async function approveLabourRequest(req, res, next) {
     const request = await LabourRequest.findByPk(id, {
       include: [ENTRY_INCLUDE],
     });
-    if (!request) return error(res, 404, "Labour request not found");
+    if (!request) return error(res, 404, labourRequestMessages.labourRequestNotFound);
 
     if (request.status !== "verified") {
       return error(
         res,
         409,
-        `Cannot approve a request with status "${request.status}"`,
+        labourRequestMessages.cannotApproveARequestWithStatus(request.status),
       );
     }
 
     const transportCost = parseTransportCost(req.body?.transportCost);
     if (transportCost === null) {
-      return error(res, 400, "transportCost must be a number ≥ 0");
+      return error(res, 400, labourRequestMessages.transportCostMustBeANumber0);
     }
 
     await request.update({
@@ -615,18 +616,18 @@ async function approveLabourRequest(req, res, next) {
         });
       } else {
         paymentSkippedReason =
-          "No crop-wise rate found for this labor group on the requested crop(s) and no transport cost";
+          labourRequestMessages.noCropWiseRateFoundFor;
       }
     } else {
       paymentSkippedReason =
-        "This request used an 'Others' labor group — no rate table to calculate a payment from";
+        labourRequestMessages.thisRequestUsedAnOthersLabor;
     }
 
     const updated = await LabourRequest.findByPk(id, {
       include: [...HEADER_INCLUDES, ENTRY_INCLUDE],
     });
 
-    return success(res, 200, "Labour request approved successfully", {
+    return success(res, 200, labourRequestMessages.labourRequestApprovedSuccessfully, {
       data: updated,
       cost,
       payment,
@@ -644,13 +645,13 @@ async function rejectLabourRequest(req, res, next) {
     const { rejectionReason } = req.body;
 
     const request = await LabourRequest.findByPk(id);
-    if (!request) return error(res, 404, "Labour request not found");
+    if (!request) return error(res, 404, labourRequestMessages.labourRequestNotFound);
 
     if (["approved", "rejected"].includes(request.status)) {
       return error(
         res,
         409,
-        `Cannot reject a request with status "${request.status}"`,
+        labourRequestMessages.cannotRejectARequestWithStatus(request.status),
       );
     }
 
@@ -667,7 +668,7 @@ async function rejectLabourRequest(req, res, next) {
       rejectedStage,
     });
 
-    return success(res, 200, "Labour request rejected", { data: request });
+    return success(res, 200, labourRequestMessages.labourRequestRejected, { data: request });
   } catch (err) {
     next(err);
   }

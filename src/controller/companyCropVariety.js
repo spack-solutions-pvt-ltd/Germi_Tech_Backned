@@ -9,6 +9,7 @@ const {
 } = require("../utils/pagination");
 const { success, error } = require("../utils/response");
 const { generateId } = require("../utils/generateIds");
+const { companyCropVarietyMessages } = require("../constants/message/companyCropVarietyMessages");
 
 /**
  * "Crop varieties" — one row per crop+variety a specific company offers.
@@ -43,7 +44,7 @@ async function getAllCropVarieties(req, res, next) {
         ],
         order: [["createdAt", "DESC"]],
       });
-      return success(res, 200, "Crop varieties fetched successfully", { data });
+      return success(res, 200, companyCropVarietyMessages.cropFetchSuccess, { data });
     }
 
     const result = await CompanyCrop.findAndCountAll({
@@ -59,7 +60,7 @@ async function getAllCropVarieties(req, res, next) {
     return success(
       res,
       200,
-      "Crop varieties fetched successfully",
+      companyCropVarietyMessages.cropFetchSuccess,
       buildPaginatedResponse(result, page, limit),
     );
   } catch (err) {
@@ -71,12 +72,12 @@ async function getAllCropVarieties(req, res, next) {
 async function getCropVarietyById(req, res, next) {
   try {
     const { id } = req.params;
-    if (!id) return error(res, 400, "id is required");
+    if (!id) return error(res, 400, companyCropVarietyMessages.idRequired);
 
     const cropVariety = await CompanyCrop.findByPk(id);
-    if (!cropVariety) return error(res, 404, "Crop variety not found");
+    if (!cropVariety) return error(res, 404, companyCropVarietyMessages.cropVarietyNotFound);
 
-    return success(res, 200, "Crop variety fetched successfully", {
+    return success(res, 200, companyCropVarietyMessages.getCropSuccess, {
       data: cropVariety,
     });
   } catch (err) {
@@ -89,16 +90,16 @@ async function createCropVariety(req, res, next) {
   try {
     const { companyId, cropId, varietyName, status } = req.body;
 
-    if (!companyId) return error(res, 400, "companyId is required");
-    if (!cropId) return error(res, 400, "cropId is required");
-    if (!varietyName) return error(res, 400, "varietyName is required");
+    if (!companyId) return error(res, 400, companyCropVarietyMessages.companyIdReq);
+    if (!cropId) return error(res, 400, companyCropVarietyMessages.cropIdReq);
+    if (!varietyName) return error(res, 400, companyCropVarietyMessages.varietyNameReq);
 
     const [company, crop] = await Promise.all([
       SeedCompany.findByPk(companyId),
       Crop.findByPk(cropId),
     ]);
-    if (!company) return error(res, 404, "Seed company not found");
-    if (!crop) return error(res, 404, "Crop not found");
+    if (!company) return error(res, 404, companyCropVarietyMessages.seedComNotFound);
+    if (!crop) return error(res, 404, companyCropVarietyMessages.cropNotFound);
 
     const cropVariety = await CompanyCrop.create({
       companyId,
@@ -109,7 +110,7 @@ async function createCropVariety(req, res, next) {
 
     const companyCropId = generateId("SDV", cropVariety?.id);
     await cropVariety.update({ companyCropId });
-    return success(res, 201, "Crop variety created successfully", {
+    return success(res, 201, companyCropVarietyMessages.createMessage, {
       data: cropVariety,
     });
   } catch (err) {
@@ -121,10 +122,10 @@ async function createCropVariety(req, res, next) {
 async function updateCropVariety(req, res, next) {
   try {
     const { id } = req.params;
-    if (!id) return error(res, 400, "id is required");
+    if (!id) return error(res, 400, companyCropVarietyMessages.idRequired);
 
     const cropVariety = await CompanyCrop.findByPk(id);
-    if (!cropVariety) return error(res, 404, "Crop variety not found");
+    if (!cropVariety) return error(res, 404, companyCropVarietyMessages.cropVarietyNotFound);
 
     const { varietyName, status, cropId } = req.body;
 
@@ -134,7 +135,7 @@ async function updateCropVariety(req, res, next) {
       ...(cropId !== undefined && { cropId }),
     });
 
-    return success(res, 200, "Crop variety updated successfully", {
+    return success(res, 200, companyCropVarietyMessages.updatedMessage, {
       data: cropVariety,
     });
   } catch (err) {
@@ -142,7 +143,7 @@ async function updateCropVariety(req, res, next) {
       return error(
         res,
         409,
-        "This company already has this crop/variety combination",
+        companyCropVarietyMessages.cropVarietyFound,
       );
     }
     next(err);
@@ -153,13 +154,13 @@ const updateCropVarietieStatus = async (req, res, next) => {
   try {
     const { id } = req.params;
     const { status } = req.body;
-    if (!id) return error(res, 400, "Seed varieties id is required");
-    if (!status) return error(res, 400, "status is required");
+    if (!id) return error(res, 400, companyCropVarietyMessages.seedVarietyIdReq);
+    if (!status) return error(res, 400, companyCropVarietyMessages.statusReqMsg);
 
     const company = await CompanyCrop.findByPk(id);
-    if (!company) return error(res, 404, "Company crop not found");
+    if (!company) return error(res, 404, companyCropVarietyMessages.companyCropNotFound);
     await company.update({ status });
-    return success(res, 200, "CompanyCrop status updated successfully", {
+    return success(res, 200, companyCropVarietyMessages.companyStatusUpdateMsg, {
       data: company,
     });
   } catch (error) {

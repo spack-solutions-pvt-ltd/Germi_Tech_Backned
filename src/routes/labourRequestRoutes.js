@@ -1,5 +1,6 @@
 "use strict";
 const { Router } = require("express");
+const { labourRequestRoutes } = require("../constants/routes");
 const {
   getMyLabourRequests,
   getMyLabourSummary,
@@ -19,16 +20,16 @@ const { getMyAssignedAllotmentVillages } = require("../controller/allotmentContr
 
 const router = Router();
 
-router.get("/my-requests", getMyLabourRequests); //my requests
-router.get("/allotment-villages",getMyAssignedAllotmentVillages)
-router.get("/", getAllLabourRequests); //verifications and approvals 
-router.get("/my-summary", getMyLabourSummary); // Requests page KPIs (own)
-router.get("/summary", getLabourSummary); // Verifications / Approvals KPIs (all)
-router.get("/:id", getLabourRequestById); 
-router.post("/", labourRequestUpload, createLabourRequest);
-router.put("/:id", labourRequestUpload, updateLabourRequest);
-router.put("/:id/verify", verifyLabourRequest);
-router.put("/:id/approve", approveLabourRequest);
-router.put("/:id/reject", rejectLabourRequest);
+router.get(labourRequestRoutes.myRequests, getMyLabourRequests); //my requests
+router.get(labourRequestRoutes.allotmentVillages,getMyAssignedAllotmentVillages)
+router.get(labourRequestRoutes.root, getAllLabourRequests); //verifications and approvals 
+router.get(labourRequestRoutes.mySummary, getMyLabourSummary); // Requests page KPIs (own)
+router.get(labourRequestRoutes.summary, getLabourSummary); // Verifications / Approvals KPIs (all)
+router.get(labourRequestRoutes.byId, getLabourRequestById); 
+router.post(labourRequestRoutes.root, labourRequestUpload, createLabourRequest);
+router.put(labourRequestRoutes.byId, labourRequestUpload, updateLabourRequest);
+router.put(labourRequestRoutes.verifyById, verifyLabourRequest);
+router.put(labourRequestRoutes.approveById, approveLabourRequest);
+router.put(labourRequestRoutes.rejectById, rejectLabourRequest);
 
 module.exports = router;

@@ -1,5 +1,6 @@
 "use strict";
 const { Router } = require("express");
+const { allotmentRoutes } = require("../constants/routes");
 const {
   getAllAllotments,
   getAllotmentsSummary,
@@ -17,18 +18,18 @@ const {
 const router = Router();
 
 // Fixed paths first — otherwise "/:id" would capture them.
-router.get("/", getAllAllotments);
-router.get("/summary", getAllotmentsSummary); // KPI cards (same filters as the list)
-router.get("/village-table", getAllotmentVillageTable);
-router.get("/my-assignments", getMyAssignedAllotmentVillages); // allotments assigned to the logged-in user
+router.get(allotmentRoutes.root, getAllAllotments);
+router.get(allotmentRoutes.summary, getAllotmentsSummary); // KPI cards (same filters as the list)
+router.get(allotmentRoutes.villageTable, getAllotmentVillageTable);
+router.get(allotmentRoutes.myAssignments, getMyAssignedAllotmentVillages); // allotments assigned to the logged-in user
 
-router.get("/:id", getAllotmentById);
-router.post("/", createAllotment);
-router.put("/:id", updateAllotment);
-router.delete("/:id", deleteAllotment);
+router.get(allotmentRoutes.byId, getAllotmentById);
+router.post(allotmentRoutes.root, createAllotment);
+router.put(allotmentRoutes.byId, updateAllotment);
+router.delete(allotmentRoutes.byId, deleteAllotment);
 
-router.get("/:id/villages", getVillageAllotmentsByAllotment); // village allotments of one allotment
-router.post("/:id/villages", addVillageAllotment);
-router.put("/:id/villages/:villageAllotmentId", updateVillageAllotment);
+router.get(allotmentRoutes.villagesById, getVillageAllotmentsByAllotment); // village allotments of one allotment
+router.post(allotmentRoutes.villagesById, addVillageAllotment);
+router.put(allotmentRoutes.villagesByIdAndVillageAllotmentId, updateVillageAllotment);
 
 module.exports = router;

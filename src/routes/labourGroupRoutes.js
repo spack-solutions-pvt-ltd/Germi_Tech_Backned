@@ -1,5 +1,6 @@
 "use strict";
 const { Router } = require("express");
+const { labourGroupRoutes } = require("../constants/routes");
 const {
   getLaborGroupSummary,
   getLaborGroupPayments,
@@ -12,12 +13,12 @@ const {
 
 const router = Router();
 
-router.get("/summary", getLaborGroupSummary); // KPI cards — before /:id
-router.get("/", getAllLaborGroups);
-router.get("/:id", getLaborGroupById);
-router.get("/:id/payments", getLaborGroupPayments); // payments history
-router.get("/:id/payments/:paymentId", getLaborGroupPaymentById); // payment drawer: wage breakdown
-router.post("/", createLaborGroup);
-router.put("/:id", updateLaborGroup);
+router.get(labourGroupRoutes.summary, getLaborGroupSummary); // KPI cards — before /:id
+router.get(labourGroupRoutes.root, getAllLaborGroups);
+router.get(labourGroupRoutes.byId, getLaborGroupById);
+router.get(labourGroupRoutes.paymentsById, getLaborGroupPayments); // payments history
+router.get(labourGroupRoutes.paymentsByIdAndPaymentId, getLaborGroupPaymentById); // payment drawer: wage breakdown
+router.post(labourGroupRoutes.root, createLaborGroup);
+router.put(labourGroupRoutes.byId, updateLaborGroup);
 
 module.exports = router;

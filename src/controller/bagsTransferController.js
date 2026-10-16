@@ -36,6 +36,7 @@ const {
   resolveRequestOwner,
 } = require("../utils/requestOwnership");
 const { OPEN_ALLOTMENT, assertAllotmentOpen } = require("../utils/allotmentStatus");
+const { bagsTransferMessages } = require("../constants/message/bagsTransferMessages");
 
 const GERMITECH_COMPANY_NAME = "Germi Tech Company";
 
@@ -148,7 +149,7 @@ async function listBagsTransfers(baseWhere, req, res, next) {
 
     const response = buildPaginatedResponse(result, page, limit);
     response.data = result.rows.map((r) => decorate(r, req.employee.id));
-    return success(res, 200, "Bags transfers fetched successfully", response);
+    return success(res, 200, bagsTransferMessages.bagsTransfersFetchedSuccessfully, response);
   } catch (err) {
     next(err);
   }
@@ -201,7 +202,7 @@ async function getCompanyBagsTransfers(req, res, next) {
 /** where for transfers sent to a company, from ?toCompanyType=&toCompanyId=&senderId=. Throws 400 on a bad type. */
 function companyTransferWhere({ toCompanyType, toCompanyId, senderId }) {
   if (toCompanyType && !["germitech", "seed_company"].includes(toCompanyType)) {
-    throw httpError(400, 'toCompanyType must be "germitech" or "seed_company"');
+    throw httpError(400, bagsTransferMessages.toCompanyTypeMustBeGermitechOrSeed);
   }
   const where = { type: "return" };
   if (toCompanyType) where.toCompanyType = toCompanyType;
@@ -248,7 +249,7 @@ async function getCompanyBagsTransferSummary(req, res, next) {
       add(row.toCompanyType === "germitech" ? data.toGermitech : data.toSeedCompanies, row);
     }
 
-    return success(res, 200, "Company bags transfer summary fetched successfully", { data });
+    return success(res, 200, bagsTransferMessages.companyBagsTransferSummaryFetchedSuccessfully, { data });
   } catch (err) {
     next(err);
   }
@@ -258,14 +259,14 @@ async function getCompanyBagsTransferSummary(req, res, next) {
 async function getBagsTransferById(req, res, next) {
   try {
     const transfer = await fetchFull(req.params.id);
-    if (!transfer) return error(res, 404, "Bags transfer not found");
+    if (!transfer) return error(res, 404, bagsTransferMessages.bagsTransferNotFound);
     const canView =
       isProcessor(req.employee) ||
       isRequestOwner(transfer, req.employee, "senderId") ||
       transfer.toSupervisorId === req.employee.id;
-    if (!canView) return error(res, 403, "You don't have access to this bags transfer");
+    if (!canView) return error(res, 403, bagsTransferMessages.youDonTHaveAccessTo);
 
-    return success(res, 200, "Bags transfer fetched successfully", {
+    return success(res, 200, bagsTransferMessages.bagsTransferFetchedSuccessfully, {
       data: decorate(transfer, req.employee.id),
     });
   } catch (err) {
@@ -303,7 +304,7 @@ async function getMyBagsTransferSummary(req, res, next) {
       countByStatus({ type: "shared", toSupervisorId: me }),
       BagsBalance.sum("availableBags", { where: { supervisorId: me } }),
     ]);
-    return success(res, 200, "Bags transfer summary fetched successfully", {
+    return success(res, 200, bagsTransferMessages.bagsTransferSummaryFetchedSuccessfully, {
       data: { outgoing, incoming, bagsWithMe: bagsWithMe || 0 },
     });
   } catch (err) {
@@ -352,7 +353,7 @@ async function getMyAllotmentsWithBags(req, res, next) {
         sendableBags: Math.max(bagsWithHim - committedBags, 0),
       };
     });
-    return success(res, 200, "Allotments fetched successfully", { data });
+    return success(res, 200, bagsTransferMessages.allotmentsFetchedSuccessfully, { data });
   } catch (err) {
     next(err);
   }
@@ -362,13 +363,13 @@ async function getMyAllotmentsWithBags(req, res, next) {
 async function getBagsBalance(req, res, next) {
   try {
     const av = await AllotmentVillage.findByPk(req.params.allotmentVillageId);
-    if (!av) return error(res, 404, "Allotment-village not found");
+    if (!av) return error(res, 404, bagsTransferMessages.allotmentVillageNotFound);
     if (av.supervisorId !== req.employee.id && !isProcessor(req.employee)) {
-      return error(res, 403, "You are not the supervisor of this allotment");
+      return error(res, 403, bagsTransferMessages.youAreNotTheSupervisorOf);
     }
     const balance = await getBalance(av.supervisorId, av.id);
     const committedBags = await getCommittedBags(av.supervisorId, av.id);
-    return success(res, 200, "Bags balance fetched successfully", {
+    return success(res, 200, bagsTransferMessages.bagsBalanceFetchedSuccessfully, {
       data: { ...balance, committedBags, sendableBags: Math.max(balance.availableBags - committedBags, 0) },
     });
   } catch (err) {
@@ -384,7 +385,7 @@ async function getDestinationCompanies(req, res, next) {
       { toCompanyType: "germitech", toCompanyId: null, name: GERMITECH_COMPANY_NAME },
       ...seedCompanies.map((c) => ({ toCompanyType: "seed_company", toCompanyId: c.id, name: c.name })),
     ];
-    return success(res, 200, "Companies fetched successfully", { data });
+    return success(res, 200, bagsTransferMessages.companiesFetchedSuccessfully, { data });
   } catch (err) {
     next(err);
   }
@@ -400,7 +401,7 @@ async function getSupervisors(req, res, next) {
       attributes: ["id", "empId", "name", "level"],
       order: [["createdAt", "DESC"]],
     });
-    return success(res, 200, "Supervisors fetched successfully", { data });
+    return success(res, 200, bagsTransferMessages.supervisorsFetchedSuccessfully, { data });
   } catch (err) {
     next(err);
   }
@@ -414,7 +415,7 @@ async function getSupervisorAllotments(req, res, next) {
       include: avDetailInclude(),
       order: [["createdAt", "DESC"]],
     });
-    return success(res, 200, "Allotments fetched successfully", { data: rows.map(toAllotmentOption) });
+    return success(res, 200, bagsTransferMessages.allotmentsFetchedSuccessfully, { data: rows.map(toAllotmentOption) });
   } catch (err) {
     next(err);
   }
@@ -428,22 +429,22 @@ async function getSupervisorAllotments(req, res, next) {
  * Validates the Send bags form and returns the BagsTransfer columns it maps to.
  * input: { fromAllotmentVillageId, bags, note?, sendTo: "company" | "supervisor",
  *          company:    toCompanyType: "germitech" | "seed_company", toCompanyId (seed_company only)
- *          supervisor: toSupervisorId, toAllotmentVillageId }
+ *          supervisor: toSupervisorId — the receiver picks their allotment when they mark it received }
  * keepIds: allotments a transfer being edited already uses (allowed even if closed since).
  */
 async function buildTransferFields(input, senderId, keepIds = []) {
-  const { fromAllotmentVillageId, sendTo, toCompanyType, toCompanyId, toSupervisorId, toAllotmentVillageId } = input;
+  const { fromAllotmentVillageId, sendTo, toCompanyType, toCompanyId, toSupervisorId } = input;
 
   const bags = toPositiveInt(input.bags);
-  if (!bags) throw httpError(400, "bags must be a positive whole number");
-  if (!fromAllotmentVillageId) throw httpError(400, "fromAllotmentVillageId is required");
+  if (!bags) throw httpError(400, bagsTransferMessages.bagsMustBeAPositiveWhole);
+  if (!fromAllotmentVillageId) throw httpError(400, bagsTransferMessages.fromAllotmentVillageIdIsRequired);
 
   const fromAv = await AllotmentVillage.findByPk(fromAllotmentVillageId);
-  if (!fromAv) throw httpError(404, "Allotment-village not found");
+  if (!fromAv) throw httpError(404, bagsTransferMessages.allotmentVillageNotFound);
   if (fromAv.supervisorId !== senderId) {
-    throw httpError(403, "The selected allotment is not assigned to the sending supervisor");
+    throw httpError(403, bagsTransferMessages.theSelectedAllotmentIsNotAssigned);
   }
-  assertAllotmentOpen(fromAv, "From allotment", keepIds);
+  assertAllotmentOpen(fromAv, bagsTransferMessages.fromAllotment, keepIds);
 
   // Every destination column is reset, so switching company <-> supervisor on edit leaves nothing stale.
   const fields = {
@@ -458,37 +459,31 @@ async function buildTransferFields(input, senderId, keepIds = []) {
 
   if (sendTo === "company") {
     if (!["germitech", "seed_company"].includes(toCompanyType)) {
-      throw httpError(400, 'toCompanyType must be "germitech" or "seed_company"');
+      throw httpError(400, bagsTransferMessages.toCompanyTypeMustBeGermitechOrSeed);
     }
     fields.type = "return";
     fields.toCompanyType = toCompanyType;
     if (toCompanyType === "seed_company") {
       const company = toCompanyId && (await SeedCompany.findByPk(toCompanyId));
-      if (!company) throw httpError(404, "Seed company not found");
+      if (!company) throw httpError(404, bagsTransferMessages.seedCompanyNotFound);
       fields.toCompanyId = company.id;
     }
     return fields;
   }
 
   if (sendTo === "supervisor") {
-    if (!toSupervisorId || !toAllotmentVillageId) {
-      throw httpError(400, "toSupervisorId and toAllotmentVillageId are required");
-    }
-    if (Number(toSupervisorId) === senderId) throw httpError(400, "Bags cannot be sent to the same supervisor");
+    // Only the receiving supervisor is chosen here. They pick which of their
+    // allotments the bags go into when they mark the transfer received.
+    if (!toSupervisorId) throw httpError(400, bagsTransferMessages.toSupervisorIdIsRequired);
+    if (Number(toSupervisorId) === senderId) throw httpError(400, bagsTransferMessages.bagsCannotBeSentToThe);
     const receiver = await Employee.findByPk(toSupervisorId);
-    if (!receiver) throw httpError(404, "Supervisor not found");
-    const toAv = await AllotmentVillage.findByPk(toAllotmentVillageId);
-    if (!toAv || toAv.supervisorId !== receiver.id) {
-      throw httpError(400, "Selected allotment does not belong to the selected supervisor");
-    }
-    assertAllotmentOpen(toAv, "To allotment", keepIds);
+    if (!receiver) throw httpError(404, bagsTransferMessages.supervisorNotFound);
     fields.type = "shared";
     fields.toSupervisorId = receiver.id;
-    fields.toAllotmentVillageId = toAv.id;
-    return fields;
+    return fields; // toAllotmentVillageId stays null until received
   }
 
-  throw httpError(400, 'sendTo must be "company" or "supervisor"');
+  throw httpError(400, bagsTransferMessages.sendToMustBeCompanyOrSupervisor);
 }
 
 /**
@@ -500,7 +495,7 @@ async function assertSendable(senderId, fromAllotmentVillageId, bags, t, exclude
   const committed = await getCommittedBags(senderId, fromAllotmentVillageId, t, excludeTransferId);
   const sendable = balance.availableBags - committed;
   if (bags > sendable) {
-    throw httpError(409, `Only ${Math.max(sendable, 0)} bags can be sent from this allotment`);
+    throw httpError(409, bagsTransferMessages.onlyBagsCanBeSentFrom(Math.max(sendable, 0)));
   }
 }
 
@@ -527,7 +522,7 @@ async function createBagsTransfer(req, res, next) {
       return created.id;
     });
 
-    return success(res, 201, "Bags sent successfully", { data: decorate(await fetchFull(id), req.employee.id) });
+    return success(res, 201, bagsTransferMessages.bagsSentSuccessfully, { data: decorate(await fetchFull(id), req.employee.id) });
   } catch (err) {
     next(err);
   }
@@ -554,9 +549,9 @@ async function updateBagsTransfer(req, res, next) {
   try {
     await sequelize.transaction(async (t) => {
       const transfer = await BagsTransfer.findByPk(req.params.id, { transaction: t, lock: t.LOCK.UPDATE });
-      if (!transfer) throw httpError(404, "Bags transfer not found");
+      if (!transfer) throw httpError(404, bagsTransferMessages.bagsTransferNotFound);
       assertRequestOwner(transfer, req.employee, "senderId");
-      if (transfer.status !== "pending") throw httpError(409, "Transfers can only be edited while Pending");
+      if (transfer.status !== "pending") throw httpError(409, bagsTransferMessages.transfersCanOnlyBeEditedWhile);
 
       const changes = Object.fromEntries(Object.entries(req.body || {}).filter(([, v]) => v !== undefined));
       const fields = await buildTransferFields({ ...transferAsInput(transfer), ...changes }, transfer.senderId, [
@@ -569,7 +564,7 @@ async function updateBagsTransfer(req, res, next) {
       await logStatus(transfer.id, "pending", "pending", req.employee.id, fields.bags, "Transfer edited", t);
     });
 
-    return success(res, 200, "Bags transfer updated successfully", {
+    return success(res, 200, bagsTransferMessages.bagsTransferUpdatedSuccessfully, {
       data: decorate(await fetchFull(req.params.id), req.employee.id),
     });
   } catch (err) {
@@ -593,16 +588,16 @@ function authorizeTransition(transfer, toStatus, employee) {
 
   if (["received", "not_received"].includes(toStatus)) {
     // The sender can't confirm their own transfer; an L1/L2 who sent it on their behalf can.
-    if (isRequestFor(transfer, employee, "senderId")) return "You cannot confirm your own transfer";
+    if (isRequestFor(transfer, employee, "senderId")) return bagsTransferMessages.youCannotConfirmYourOwnTransfer;
     if (isReceiver) return null;
     return transfer.type === "shared"
-      ? "Only the receiving supervisor can confirm these bags"
-      : "Only L1/L2 can confirm bags returned to a company";
+      ? bagsTransferMessages.onlyTheReceivingSupervisorCanConfirm
+      : bagsTransferMessages.onlyL1L2CanConfirmBags;
   }
   if (toStatus === "cancelled") {
-    return isReceiver || isOwner ? null : "You cannot cancel this transfer";
+    return isReceiver || isOwner ? null : bagsTransferMessages.youCannotCancelThisTransfer;
   }
-  return "You cannot perform this action";
+  return bagsTransferMessages.youCannotPerformThisAction;
 }
 
 /**
@@ -630,11 +625,26 @@ function transferMovements(transfer, direction = 1) {
 }
 
 /**
+ * The receiving supervisor's allotment for a 'shared' transfer being marked
+ * received: required, theirs, and open.
+ */
+async function resolveReceivingAllotment(transfer, toAllotmentVillageId, t) {
+  if (!toAllotmentVillageId) throw httpError(400, bagsTransferMessages.toAllotmentVillageIdRequiredToReceive);
+  const toAv = await AllotmentVillage.findByPk(toAllotmentVillageId, { transaction: t });
+  if (!toAv) throw httpError(404, bagsTransferMessages.receivingAllotmentNotFound);
+  if (toAv.supervisorId !== transfer.toSupervisorId) throw httpError(400, bagsTransferMessages.receivingAllotmentNotYours);
+  assertAllotmentOpen(toAv, bagsTransferMessages.toAllotment);
+  return toAv;
+}
+
+/**
  * PUT /bag-transfers/:id/status
- * body: { status: "received" | "not_received" | "cancelled", note? }
+ * body: { status: "received" | "not_received" | "cancelled", toAllotmentVillageId?, note? }
+ *   toAllotmentVillageId — required to mark a supervisor transfer received: the
+ *                          receiver's own allotment the bags go into
  *   note — optional; saved in the status history (and as the cancellation reason)
  *
- * received                    — sender's allotment -bags; receiver's allotment +bags ('shared')
+ * received                    — sender's allotment -bags; receiver's chosen allotment +bags ('shared')
  * received → not_received /
  *            cancelled         — resets that: sender gets the bags back, receiver loses them
  *                                (409 if the receiver no longer has them)
@@ -645,15 +655,15 @@ async function updateBagsTransferStatus(req, res, next) {
   try {
     const { status: toStatus } = req.body;
     const note = req.body.note || req.body.reason || null; // "reason" still accepted from older clients
-    if (!toStatus) return error(res, 400, "status is required");
+    if (!toStatus) return error(res, 400, bagsTransferMessages.statusIsRequired);
 
     await sequelize.transaction(async (t) => {
       const transfer = await BagsTransfer.findByPk(req.params.id, { transaction: t, lock: t.LOCK.UPDATE });
-      if (!transfer) throw httpError(404, "Bags transfer not found");
+      if (!transfer) throw httpError(404, bagsTransferMessages.bagsTransferNotFound);
 
       const fromStatus = transfer.status;
       if (!(STATUS_FLOW[fromStatus] || []).includes(toStatus)) {
-        throw httpError(409, `Cannot move a transfer from "${fromStatus}" to "${toStatus}"`);
+        throw httpError(409, bagsTransferMessages.cannotMoveATransferFromTo(fromStatus, toStatus));
       }
       const denied = authorizeTransition(transfer, toStatus, req.employee);
       if (denied) throw httpError(403, denied);
@@ -662,6 +672,12 @@ async function updateBagsTransferStatus(req, res, next) {
       const updates = { status: toStatus };
 
       if (toStatus === "received") {
+        if (transfer.type === "shared") {
+          // The receiver chooses which of their own allotments the bags go into.
+          const toAv = await resolveReceivingAllotment(transfer, req.body.toAllotmentVillageId, t);
+          transfer.toAllotmentVillageId = toAv.id;
+          updates.toAllotmentVillageId = toAv.id;
+        }
         for (const m of transferMovements(transfer)) await applyBagMovement(m, t);
         Object.assign(updates, { receivedBy: req.employee.id, receivedAt: now });
       } else if (fromStatus === "received") {
@@ -669,6 +685,8 @@ async function updateBagsTransferStatus(req, res, next) {
         // already used / passed on those bags and can't give them back.
         for (const m of transferMovements(transfer, -1)) await applyBagMovement(m, t);
         Object.assign(updates, { receivedBy: null, receivedAt: null });
+        // The bags left that allotment — if received again, the receiver picks again.
+        if (transfer.type === "shared") updates.toAllotmentVillageId = null;
       }
 
       if (toStatus === "cancelled") {
@@ -683,7 +701,7 @@ async function updateBagsTransferStatus(req, res, next) {
       await logStatus(transfer.id, fromStatus, toStatus, req.employee.id, transfer.bags, note, t);
     });
 
-    return success(res, 200, "Bags transfer status updated successfully", {
+    return success(res, 200, bagsTransferMessages.bagsTransferStatusUpdatedSuccessfully, {
       data: decorate(await fetchFull(req.params.id), req.employee.id),
     });
   } catch (err) {

@@ -25,6 +25,7 @@ const { allotmentVillageInclude, EMP_ATTRS } = require("../utils/bagsCommon");
 const { allotmentScope, seasonFilter } = require("../utils/periods");
 const { OPEN_ALLOTMENT } = require("../utils/allotmentStatus");
 const { getPagination, buildPaginatedResponse } = require("../utils/pagination");
+const { dashboardMessages } = require("../constants/message/dashboardMessages");
 
 const OPEN_TASK_STATUSES = ["Pending", "Approval", "Reassigned", "Overdue"];
 
@@ -279,7 +280,7 @@ async function getL1Dashboard(req, res, next) {
       .map(([crop, acres]) => ({ crop, acres }))
       .sort((a, b) => b.acres - a.acres);
 
-    return success(res, 200, "L1 dashboard fetched successfully", {
+    return success(res, 200, dashboardMessages.l1DashboardFetchedSuccessfully, {
       data: {
         notifications,
         scope: scopeLabel(req.query),
@@ -320,7 +321,7 @@ async function getL2Dashboard(req, res, next) {
       pendingPayments(),
     ]);
 
-    return success(res, 200, "L2 dashboard fetched successfully", {
+    return success(res, 200, dashboardMessages.l2DashboardFetchedSuccessfully, {
       data: {
         notifications,
         cards: {
@@ -406,7 +407,7 @@ async function getL3Dashboard(req, res, next) {
       AllotmentVillage.findAll(scope.options),
     ]);
 
-    return success(res, 200, "L3 dashboard fetched successfully", {
+    return success(res, 200, dashboardMessages.l3DashboardFetchedSuccessfully, {
       data: {
         notifications,
         scope: scope.label,
@@ -462,7 +463,7 @@ async function getL3Allotments(req, res, next) {
     });
     response.scope = scope.label;
 
-    return success(res, 200, "My allotments fetched successfully", response);
+    return success(res, 200, dashboardMessages.myAllotmentsFetchedSuccessfully, response);
   } catch (err) {
     next(err);
   }
@@ -476,7 +477,7 @@ const DASHBOARD_BY_LEVEL = { L1: getL1Dashboard, L2: getL2Dashboard, L3: getL3Da
 
 function getMyDashboard(req, res, next) {
   const handler = DASHBOARD_BY_LEVEL[req.employee.level];
-  if (!handler) return error(res, 400, `No dashboard for level ${req.employee.level}`);
+  if (!handler) return error(res, 400, dashboardMessages.noDashboardForLevel(req.employee.level));
   return handler(req, res, next);
 }
 

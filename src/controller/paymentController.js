@@ -20,6 +20,7 @@ const {
   typeFilterValues,
 } = require("../constants/payments");
 const { seasonFilter, paymentSeasonWhere } = require("../utils/periods");
+const { paymentMessages } = require("../constants/message/paymentMessages");
 
 // Types offered in the filter ("expense" is only the legacy name of "supervisor").
 const SELECTABLE_TYPES = Object.keys(PAYMENT_TYPES).filter((t) => t !== "expense");
@@ -43,7 +44,7 @@ function parseTypes(type) {
   const types = String(type).split(",").map((t) => t.trim().toLowerCase()).filter(Boolean);
   const unknown = types.filter((t) => !PAYMENT_TYPES[t]);
   if (unknown.length) {
-    throw httpError(400, `Unknown payment type: ${unknown.join(", ")}. Use: ${SELECTABLE_TYPES.join(", ")}`);
+    throw httpError(400, paymentMessages.unknownPaymentTypeUse(unknown.join(", "), SELECTABLE_TYPES.join(", ")));
   }
   return [...new Set(types.flatMap(typeFilterValues))];
 }
@@ -57,7 +58,7 @@ function typesMatching(text) {
 }
 
 function assertDate(name, value) {
-  if (value && !DATE_ONLY.test(value)) throw httpError(400, `${name} must be YYYY-MM-DD`);
+  if (value && !DATE_ONLY.test(value)) throw httpError(400, paymentMessages.mustBeYyyyMmDd(name));
 }
 
 /**
@@ -134,8 +135,8 @@ async function fetchPaymentDetails(id) {
 /** Loads a payment locked for update; it must still be pending. */
 async function lockPendingPayment(id, t) {
   const payment = await Payment.findByPk(id, { transaction: t, lock: t.LOCK.UPDATE });
-  if (!payment) throw httpError(404, "Payment not found");
-  if (payment.status !== "pending") throw httpError(409, "This payment has already been processed");
+  if (!payment) throw httpError(404, paymentMessages.paymentNotFound);
+  if (payment.status !== "pending") throw httpError(409, paymentMessages.thisPaymentHasAlreadyBeenProcessed);
   return payment;
 }
 
@@ -152,7 +153,7 @@ async function getPayments(req, res, next) {
   try {
     const { status } = req.query;
     if (status && !PAYMENT_STATUSES.includes(status)) {
-      return error(res, 400, `status must be one of: ${PAYMENT_STATUSES.join(", ")}`);
+      return error(res, 400, paymentMessages.statusMustBeOneOf(PAYMENT_STATUSES.join(", ")));
     }
     const { page, limit, offset } = getPagination(req.query);
 
@@ -167,7 +168,7 @@ async function getPayments(req, res, next) {
 
     const response = buildPaginatedResponse(result, page, limit);
     response.data = await attachPaymentContext(result.rows);
-    return success(res, 200, "Payments fetched successfully", response);
+    return success(res, 200, paymentMessages.paymentsFetchedSuccessfully, response);
   } catch (err) {
     next(err);
   }
@@ -204,7 +205,7 @@ async function getPaymentSummary(req, res, next) {
     const { pending, processed } = totals;
     const supervisorAmount = (byType) => (byType.supervisor || 0) + (byType.expense || 0);
 
-    return success(res, 200, "Payment summary fetched successfully", {
+    return success(res, 200, paymentMessages.paymentSummaryFetchedSuccessfully, {
       data: {
         totalDue: pending.total,
         labourDue: pending.byType.labour || 0,
@@ -254,7 +255,7 @@ async function getPaymentFilterOptions(req, res, next) {
     });
     const pick = (ids) => employees.filter((e) => ids.includes(e.id));
 
-    return success(res, 200, "Payment filter options fetched successfully", {
+    return success(res, 200, paymentMessages.paymentFilterOptionsFetchedSuccessfully, {
       data: { createdBy: pick(creatorIds), processedBy: pick(processorIds) },
     });
   } catch (err) {
@@ -270,8 +271,8 @@ async function getPaymentFilterOptions(req, res, next) {
 async function getPaymentById(req, res, next) {
   try {
     const data = await fetchPaymentDetails(req.params.id);
-    if (!data) return error(res, 404, "Payment not found");
-    return success(res, 200, "Payment fetched successfully", { data });
+    if (!data) return error(res, 404, paymentMessages.paymentNotFound);
+    return success(res, 200, paymentMessages.paymentFetchedSuccessfully, { data });
   } catch (err) {
     next(err);
   }
@@ -292,7 +293,7 @@ async function updatePaymentDetails(req, res, next) {
     });
 
     const data = await fetchPaymentDetails(req.params.id);
-    return success(res, 200, "Payment details saved", { data });
+    return success(res, 200, paymentMessages.paymentDetailsSaved, { data });
   } catch (err) {
     next(err);
   }
@@ -332,7 +333,7 @@ async function processPayment(req, res, next) {
     });
 
     const data = await fetchPaymentDetails(req.params.id);
-    return success(res, 200, "Payment processed successfully", { data });
+    return success(res, 200, paymentMessages.paymentProcessedSuccessfully, { data });
   } catch (err) {
     next(err);
   }

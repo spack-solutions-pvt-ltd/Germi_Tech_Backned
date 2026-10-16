@@ -1,46 +1,45 @@
+"use strict";
+
+// Response messages for controller/authController.js.
+// Functions build messages that include values (counts, codes, statuses).
 const authMessages = {
-  validation: "Email and password are required",
-  invalidEmail: "Invalid Email",
-  contactAdmin: "Your account is Inactive. Contact an admin.",
+  emailIsRequired: "Email is required",
+  passwordIsRequired: "Password is required",
+  invalidEmail: "Invalid email",
+  yourAccountIsInactiveContactAn: "Your account is inactive. Contact an admin.",
+  invalidPassword: "Invalid password",
   loginSuccess: "Login successful",
-  changePwdValidation: "currentPassword, newPasswords are required",
-  passwordValidation: "Password must be at least 8 characters",
+  refreshTokenIsRequired: "refreshToken is required",
+  refreshTokenExpiredPleaseLogIn: "Refresh token expired, please log in again",
+  invalidRefreshToken: "Invalid refresh token",
+  thisRefreshTokenHasAlreadyBeen: "This refresh token has already been used. All sessions have been logged out for safety.",
+  invalidRefreshTokenEmployeeNoLonger: "Invalid refresh token — employee no longer exists",
+  tokenRefreshedSuccessfully: "Token refreshed successfully",
   empNotFound: "Employee not found",
+  yourAccountIsInactivePleaseContact: "Your account is inactive. Please contact the admin.",
+  passwordResetOtpHasBeenSent: "Password reset OTP has been sent to your email address",
+  oTPIsRequired: "OTP is required",
+  noPasswordResetOtpIsAvailable: "No password reset OTP is available. Please request a new OTP.",
+  theOtpHasExpired: "The OTP has expired",
+  invalidOtp: "Invalid OTP",
+  oTPVerifiedSuccessfully: "OTP verified successfully.",
+  resetTokenIsRequired: "resetToken is required",
+  newPasswordIsRequired: "newPassword is required",
+  confirmPasswordIsRequired: "confirmPassword is required",
+  passwordsDoNotMatch: "Passwords do not match",
+  passwordValidation: "Password must be at least 8 characters",
+  resetSessionExpiredPleaseRequestA: "Reset session expired, please request a new OTP",
+  invalidResetToken: "Invalid reset token",
+  invalidResetTokenEmployeeNoLonger: "Invalid reset token — employee no longer exists",
+  passwordResetSuccessfullyYouCanNow: "Password reset successfully. You can now log in.",
+  authenticationRequired: "Authentication required",
+  currentPasswordIsRequired: "currentPassword is required",
+  newPasswordMustBeDifferentFrom: "New password must be different from the current password",
   incrPwd: "Current password is incorrect",
   changePwdSuccess: "Password changed successfully",
+  employeeDetailsFetchedSuccessfully: "Employee details fetched successfully",
+  refreshTokenNotFoundOrAlready: "Refresh token not found or already logged out",
+  loggedOutSuccessfully: "Logged out successfully",
 };
 
-const empMessages = {};
-
-const cropVarietyMessages = {
-  cropFetchSuccess: "Crop varieties fetched successfully",
-  getCropSuccess: "Crop variety fetched successfully",
-  cropVarietyNotFound: "Crop variety not found",
-  idRequired: "id is required",
-  companyIdReq: "companyId is required",
-  cropIdReq: "cropId is required",
-  varietyNameReq: "varietyName is required",
-  seedComNotFound: "Seed company not found",
-  cropNotFound: "Crop not found",
-  createMessage: "Crop variety created successfully",
-  updatedMessage: "Crop variety updated successfully",
-  cropVarietyFound: "This company already has this crop/variety combination",
-  seedVarietyIdReq: "Seed varieties id is required",
-  statusReqMsg: "status is required",
-  companyStatusUpdateMsg: "CompanyCrop status updated successfully",
-};
-
-const cropMessages = {
-  cropFetchMsg: "Crops fetched successfully",
-  cropIdReqMsg: "cropId is required",
-  cropNotFound: "Crop not found",
-  cropFetchMsgById: "Crop fetched",
-  failedToFetchMsg: "Failed to fetch crop",
-  cropCreated: "Crop created",
-  cropNotFound: "Crop not found",
-  cropUpdated: "Crop updated!",
-};
-
-const employeeMessages = {
-    
-};
+module.exports = { authMessages };

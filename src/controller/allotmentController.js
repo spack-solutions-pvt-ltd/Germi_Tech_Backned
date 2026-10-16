@@ -23,6 +23,7 @@ const {
   normalizeAllotmentStatus,
 } = require("../utils/allotmentStatus");
 const { toCropYear } = require("../utils/periods");
+const { allotmentMessages } = require("../constants/message/allotmentMessages");
 
 const ALLOTMENT_INCLUDES = [
   {
@@ -177,7 +178,7 @@ const getAllAllotments = async (req, res, next) => {
 
     const rows = result.rows.map(withVillageTotals);
 
-    return success(res, 200, "Allotments fetched successfully", {
+    return success(res, 200, allotmentMessages.allotmentsFetchedSuccessfully, {
       ...buildPaginatedResponse({ rows, count: result.count }, page, limit),
       summary,
     });
@@ -242,7 +243,7 @@ const getAllotmentVillageTable = async (req, res, next) => {
     return success(
       res,
       200,
-      "Allotted villages fetched successfully",
+      allotmentMessages.allottedVillagesFetchedSuccessfully,
       buildPaginatedResponse(result, page, limit),
     );
   } catch (err) {
@@ -254,15 +255,15 @@ const getAllotmentVillageTable = async (req, res, next) => {
 const getAllotmentById = async (req, res, next) => {
   try {
     const { id } = req.params;
-    if (!id) return error(res, 400, "id is required");
+    if (!id) return error(res, 400, allotmentMessages.idIsRequired);
 
     const allotment = await Allotment.findByPk(id, {
       include: [...ALLOTMENT_INCLUDES],
     });
 
-    if (!allotment) return error(res, 404, "Allotment not found");
+    if (!allotment) return error(res, 404, allotmentMessages.allotmentNotFound);
 
-    return success(res, 200, "Allotment fetched successfully", {
+    return success(res, 200, allotmentMessages.allotmentFetchedSuccessfully, {
       data: withVillageTotals(allotment),
     });
   } catch (err) {
@@ -309,13 +310,13 @@ const getVillageAllotmentsByAllotment = async (req, res, next) => {
         },
       ],
     });
-    if (!allotment) return error(res, 404, "Allotment not found");
+    if (!allotment) return error(res, 404, allotmentMessages.allotmentNotFound);
 
     const { search, supervisorId, villageId } = req.query;
     let status;
     if (req.query.status !== undefined) {
       status = normalizeAllotmentStatus(req.query.status);
-      if (!status) return error(res, 400, "status must be open or closed");
+      if (!status) return error(res, 400, allotmentMessages.statusMustBeOpenOrClosed);
     }
 
     const where = { allotmentId: allotment.id };
@@ -386,7 +387,7 @@ const getVillageAllotmentsByAllotment = async (req, res, next) => {
 
     if (!hasPagination(req.query)) {
       const data = await AllotmentVillage.findAll(query);
-      return success(res, 200, "Village allotments fetched successfully", {
+      return success(res, 200, allotmentMessages.villageAllotmentsFetchedSuccessfully, {
         allotment,
         totals,
         data,
@@ -400,7 +401,7 @@ const getVillageAllotmentsByAllotment = async (req, res, next) => {
       offset,
       distinct: true,
     });
-    return success(res, 200, "Village allotments fetched successfully", {
+    return success(res, 200, allotmentMessages.villageAllotmentsFetchedSuccessfully, {
       allotment,
       totals,
       ...buildPaginatedResponse(result, page, limit),
@@ -417,27 +418,27 @@ const createAllotment = async (req, res, next) => {
     const { companyId, companyCropId, reqAcres, reqQtyKgs, season, year } =
       req.body;
 
-    if (!companyId) return error(res, 400, "companyId is required");
-    if (!companyCropId) return error(res, 400, "companyCropId is required");
-    if (!reqAcres) return error(res, 400, "reqAcres is required");
-    if (!season) return error(res, 400, "season is required");
+    if (!companyId) return error(res, 400, allotmentMessages.companyIdIsRequired);
+    if (!companyCropId) return error(res, 400, allotmentMessages.companyCropIdIsRequired);
+    if (!reqAcres) return error(res, 400, allotmentMessages.reqAcresIsRequired);
+    if (!season) return error(res, 400, allotmentMessages.seasonIsRequired);
     if (!["Kharif", "Rabi"].includes(season))
-      return error(res, 400, "season must be Kharif or Rabi");
-    if (!year) return error(res, 400, "year is required");
+      return error(res, 400, allotmentMessages.seasonMustBeKharifOrRabi);
+    if (!year) return error(res, 400, allotmentMessages.yearIsRequired);
     const cropYear = toCropYear(year); // "25-26"
     if (!cropYear)
-      return error(res, 400, 'year must be a crop year like "25-26"');
+      return error(res, 400, allotmentMessages.yearMustBeACropYear);
 
     const company = await SeedCompany.findByPk(companyId);
-    if (!company) return error(res, 404, "Seed company not found");
+    if (!company) return error(res, 404, allotmentMessages.seedCompanyNotFound);
 
     const companyCrop = await CompanyCrop.findByPk(companyCropId);
-    if (!companyCrop) return error(res, 404, "Crop variety not found");
+    if (!companyCrop) return error(res, 404, allotmentMessages.cropVarietyNotFound);
     if (companyCrop.companyId !== Number(companyId)) {
       return error(
         res,
         400,
-        "This crop variety does not belong to the selected company",
+        allotmentMessages.thisCropVarietyDoesNotBelong,
       );
     }
 
@@ -457,7 +458,7 @@ const createAllotment = async (req, res, next) => {
       include: ALLOTMENT_INCLUDES,
     });
 
-    return success(res, 201, "Allotment created successfully", {
+    return success(res, 201, allotmentMessages.allotmentCreatedSuccessfully, {
       data: created,
     });
   } catch (err) {
@@ -470,7 +471,7 @@ const createAllotment = async (req, res, next) => {
 const updateAllotment = async (req, res, next) => {
   try {
     const { id } = req.params;
-    if (!id) return error(res, 400, "id is required");
+    if (!id) return error(res, 400, allotmentMessages.idIsRequired);
 
     const allotment = await Allotment.findByPk(id, {
       include: [
@@ -482,19 +483,19 @@ const updateAllotment = async (req, res, next) => {
         },
       ],
     });
-    if (!allotment) return error(res, 404, "Allotment not found");
+    if (!allotment) return error(res, 404, allotmentMessages.allotmentNotFound);
 
     const { reqAcres, reqQtyKgs, season, year, status } = req.body;
 
     if (season !== undefined && !["Kharif", "Rabi"].includes(season)) {
-      return error(res, 400, "season must be Kharif or Rabi");
+      return error(res, 400, allotmentMessages.seasonMustBeKharifOrRabi);
     }
     if (status !== undefined && !["open", "closed"].includes(status)) {
-      return error(res, 400, "status must be open or closed");
+      return error(res, 400, allotmentMessages.statusMustBeOpenOrClosed);
     }
     const cropYear = year !== undefined ? toCropYear(year) : undefined; // "25-26"
     if (year !== undefined && !cropYear) {
-      return error(res, 400, 'year must be a crop year like "25-26"');
+      return error(res, 400, allotmentMessages.yearMustBeACropYear);
     }
 
     if (reqAcres !== undefined) {
@@ -506,7 +507,7 @@ const updateAllotment = async (req, res, next) => {
         return error(
           res,
           409,
-          `Cannot reduce required acres below ${currentAllotted}, the amount already allotted to villages`,
+          allotmentMessages.cannotReduceRequiredAcresBelowThe(currentAllotted),
         );
       }
     }
@@ -519,7 +520,7 @@ const updateAllotment = async (req, res, next) => {
       ...(status !== undefined && { status }),
     });
 
-    return success(res, 200, "Allotment updated successfully", {
+    return success(res, 200, allotmentMessages.allotmentUpdatedSuccessfully, {
       data: allotment,
     });
   } catch (err) {
@@ -532,10 +533,10 @@ const updateAllotment = async (req, res, next) => {
 const deleteAllotment = async (req, res, next) => {
   try {
     const { id } = req.params;
-    if (!id) return error(res, 400, "id is required");
+    if (!id) return error(res, 400, allotmentMessages.idIsRequired);
 
     const allotment = await Allotment.findByPk(id);
-    if (!allotment) return error(res, 404, "Allotment not found");
+    if (!allotment) return error(res, 404, allotmentMessages.allotmentNotFound);
 
     const villageCount = await AllotmentVillage.count({
       where: { allotmentId: id },
@@ -544,13 +545,13 @@ const deleteAllotment = async (req, res, next) => {
       return error(
         res,
         409,
-        "Cannot delete an allotment that has already been allotted to a village",
+        allotmentMessages.cannotDeleteAnAllotmentThatHas,
       );
     }
 
     await allotment.destroy();
 
-    return success(res, 200, "Allotment deleted successfully", {
+    return success(res, 200, allotmentMessages.allotmentDeletedSuccessfully, {
       data: { id: Number(id) },
     });
   } catch (err) {
@@ -563,7 +564,7 @@ const deleteAllotment = async (req, res, next) => {
 const addVillageAllotment = async (req, res, next) => {
   try {
     const { id } = req.params;
-    if (!id) return error(res, 400, "id is required");
+    if (!id) return error(res, 400, allotmentMessages.idIsRequired);
 
     const allotment = await Allotment.findByPk(id, {
       include: [
@@ -575,25 +576,25 @@ const addVillageAllotment = async (req, res, next) => {
         },
       ],
     });
-    if (!allotment) return error(res, 404, "Allotment not found");
+    if (!allotment) return error(res, 404, allotmentMessages.allotmentNotFound);
 
     const { villageId, subOrganizerId, allottedAcres, supervisorId } = req.body;
 
-    if (!villageId) return error(res, 400, "villageId is required");
+    if (!villageId) return error(res, 400, allotmentMessages.villageIdIsRequired);
     if (allottedAcres === undefined)
-      return error(res, 400, "allottedAcres is required");
+      return error(res, 400, allotmentMessages.allottedAcresIsRequired);
 
     const village = await Village.findByPk(villageId);
-    if (!village) return error(res, 404, "Village not found");
+    if (!village) return error(res, 404, allotmentMessages.villageNotFound);
 
     if (subOrganizerId !== undefined) {
       const subOrganizer = await SubOrganizer.findByPk(subOrganizerId);
-      if (!subOrganizer) return error(res, 404, "Sub organizer not found");
+      if (!subOrganizer) return error(res, 404, allotmentMessages.subOrganizerNotFound);
     }
 
     if (supervisorId !== undefined) {
       const supervisor = await Employee.findByPk(supervisorId);
-      if (!supervisor) return error(res, 404, "Supervisor employee not found");
+      if (!supervisor) return error(res, 404, allotmentMessages.supervisorEmployeeNotFound);
     }
 
     const currentAllotted = (allotment.villageAllotments || []).reduce(
@@ -605,7 +606,7 @@ const addVillageAllotment = async (req, res, next) => {
       return error(
         res,
         409,
-        `Allotting ${allottedAcres} acres would exceed the requested ${allotment.reqAcres} acres (already allotted: ${currentAllotted})`,
+        allotmentMessages.allottingAcresWouldExceedTheRequested(allottedAcres, allotment.reqAcres, currentAllotted),
       );
     }
 
@@ -633,7 +634,7 @@ const addVillageAllotment = async (req, res, next) => {
       ],
     });
 
-    return success(res, 201, "Village allotted successfully", {
+    return success(res, 201, allotmentMessages.villageAllottedSuccessfully, {
       data: created,
     });
   } catch (err) {
@@ -646,15 +647,15 @@ const addVillageAllotment = async (req, res, next) => {
 async function updateVillageAllotment(req, res, next) {
   try {
     const { id, villageAllotmentId } = req.params;
-    if (!id) return error(res, 400, "id is required");
+    if (!id) return error(res, 400, allotmentMessages.idIsRequired);
     if (!villageAllotmentId)
-      return error(res, 400, "villageAllotmentId is required");
+      return error(res, 400, allotmentMessages.villageAllotmentIdIsRequired);
 
     const villageAllotment = await AllotmentVillage.findOne({
       where: { id: villageAllotmentId, allotmentId: id },
     });
     if (!villageAllotment)
-      return error(res, 404, "Village allotment not found");
+      return error(res, 404, allotmentMessages.villageAllotmentNotFound);
 
     const {
       allottedAcres,
@@ -670,12 +671,12 @@ async function updateVillageAllotment(req, res, next) {
     let status;
     if (req.body.status !== undefined) {
       status = normalizeAllotmentStatus(req.body.status);
-      if (!status) return error(res, 400, "status must be opened or closed");
+      if (!status) return error(res, 400, allotmentMessages.statusMustBeOpenedOrClosed);
     }
 
     if (supervisorId !== undefined) {
       const supervisor = await Employee.findByPk(supervisorId);
-      if (!supervisor) return error(res, 404, "Supervisor employee not found");
+      if (!supervisor) return error(res, 404, allotmentMessages.supervisorEmployeeNotFound);
     }
 
     if (allottedAcres !== undefined) {
@@ -699,7 +700,7 @@ async function updateVillageAllotment(req, res, next) {
         return error(
           res,
           409,
-          `Allotting ${allottedAcres} acres would exceed the requested ${allotment.reqAcres} acres (other villages already hold: ${othersTotal})`,
+          allotmentMessages.allottingAcresWouldExceedTheRequested2(allottedAcres, allotment.reqAcres, othersTotal),
         );
       }
     }
@@ -714,7 +715,7 @@ async function updateVillageAllotment(req, res, next) {
       ...(status !== undefined && { status }),
     });
 
-    return success(res, 200, "Village allotment updated successfully", {
+    return success(res, 200, allotmentMessages.villageAllotmentUpdatedSuccessfully, {
       data: villageAllotment,
     });
   } catch (err) {
@@ -731,7 +732,7 @@ async function updateStandingAcres(req, res, next) {
   try {
     const { villageAllotmentId } = req.params;
     if (!villageAllotmentId)
-      return error(res, 400, "villageAllotmentId is required");
+      return error(res, 400, allotmentMessages.villageAllotmentIdIsRequired);
 
     const raw = req.body?.standingAcres;
     const standingAcres = Number(raw);
@@ -742,27 +743,27 @@ async function updateStandingAcres(req, res, next) {
       !Number.isFinite(standingAcres) ||
       standingAcres < 0
     ) {
-      return error(res, 400, "standingAcres must be a number, 0 or more");
+      return error(res, 400, allotmentMessages.standingAcresMustBeANumber0);
     }
 
     const villageAllotment =
       await AllotmentVillage.findByPk(villageAllotmentId);
     if (!villageAllotment)
-      return error(res, 404, "Village allotment not found");
+      return error(res, 404, allotmentMessages.villageAllotmentNotFound);
 
     const isAssigned = villageAllotment.supervisorId === req.employee.id;
     if (!isAssigned && !["L1", "L2"].includes(req.employee.level)) {
       return error(
         res,
         403,
-        "You can only update the standing acres of an allotment assigned to you",
+        allotmentMessages.youCanOnlyUpdateTheStanding,
       );
     }
     if (villageAllotment.status === "closed") {
       return error(
         res,
         409,
-        "This allotment is closed — standing acres can't be updated",
+        allotmentMessages.thisAllotmentIsClosedStandingAcres,
       );
     }
 
@@ -785,7 +786,7 @@ async function updateStandingAcres(req, res, next) {
       return error(
         res,
         409,
-        `${standingAcres} acres would exceed the allotment's required ${reqAcres} acres (other villages already hold ${othersTotal})`,
+        allotmentMessages.acresWouldExceedTheAllotmentS(standingAcres, reqAcres, othersTotal),
       );
     }
 
@@ -797,7 +798,7 @@ async function updateStandingAcres(req, res, next) {
       gpsPendingAcres: 0,
     });
 
-    return success(res, 200, "Standing acres updated successfully", {
+    return success(res, 200, allotmentMessages.standingAcresUpdatedSuccessfully, {
       data: {
         id: villageAllotment.id,
         allotmentVillageId: villageAllotment.allotmentVillageId,
@@ -865,7 +866,7 @@ const getMyAssignedAllotmentVillages = async (req, res, next) => {
     return success(
       res,
       200,
-      "Assigned allotment-villages fetched successfully",
+      allotmentMessages.assignedAllotmentVillagesFetchedSuccessfully,
       {
         data: options,
       },
@@ -893,13 +894,13 @@ const getAllotmentVillagesBySupervisor = async (req, res, next) => {
     const supervisor = await Employee.findByPk(supervisorId, {
       attributes: ["id", "empId", "name", "level"],
     });
-    if (!supervisor) return error(res, 404, "Supervisor not found");
+    if (!supervisor) return error(res, 404, allotmentMessages.supervisorNotFound);
 
     const options = await findAllotmentOptions(supervisor.id);
     return success(
       res,
       200,
-      "Supervisor allotment-villages fetched successfully",
+      allotmentMessages.supervisorAllotmentVillagesFetchedSuccessfully,
       {
         supervisor,
         data: options,
@@ -925,7 +926,7 @@ const getSupervisorOptions = async (req, res, next) => {
       attributes: ["id", "empId", "name", "level"],
       order: [["createdAt", "DESC"]],
     });
-    return success(res, 200, "Supervisors fetched successfully", { data });
+    return success(res, 200, allotmentMessages.supervisorsFetchedSuccessfully, { data });
   } catch (err) {
     next(err);
   }
@@ -954,7 +955,7 @@ const getAllNames = async (req, res, next) => {
       crops,
     };
 
-    return success(res, 200, "Data Fetched!", { data });
+    return success(res, 200, allotmentMessages.dataFetched, { data });
   } catch (error) {
     next(error);
   }
@@ -974,7 +975,7 @@ const getAllotmentsSummary = async (req, res, next) => {
     if (year) where.year = toCropYear(year) || year; // "25-26" (2025 also accepted)
 
     const data = await getAllotmentSummary(where, cropId);
-    return success(res, 200, "Allotment summary fetched successfully", {
+    return success(res, 200, allotmentMessages.allotmentSummaryFetchedSuccessfully, {
       data,
     });
   } catch (err) {

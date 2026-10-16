@@ -1,4 +1,5 @@
 "use strict";
+const { Op } = require("sequelize");
 const {
   VehicleRequest,
   AllotmentVillage,
@@ -20,6 +21,7 @@ const { generateId } = require("../utils/generateIds");
 const { success, error } = require("../utils/response");
 const { createSummaryHandlers } = require("../utils/statusSummary");
 const { myRequestsScope, withCreatorFlags } = require("../utils/requestOwnership");
+const { vehicleRequestMessages } = require("../constants/message/vehicleRequestMessages");
 
 const INCLUDES = [
   {
@@ -70,7 +72,8 @@ const listVehicleRequests = async (where, req, res, next, { viewerId } = {}) => 
     const { status, villageId, search } = req.query;
 
     if (status) where.status = status;
-    if (search) where.requestCode = search;
+    // Partial match: "0011", "VR-00" or "vr-0011" all find VR-0011.
+    if (search?.trim()) where.requestCode = { [Op.like]: `%${search.trim()}%` };
 
     // "village" is a Village id. A request points at an AllotmentVillage, so
     // filter on the allotment-villages that belong to that village.
@@ -92,7 +95,7 @@ const listVehicleRequests = async (where, req, res, next, { viewerId } = {}) => 
 
     const response = buildPaginatedResponse(result, page, limit);
     if (viewerId) response.data = withCreatorFlags(result.rows, viewerId); // createdByMe / createdOnBehalf / canEdit
-    return success(res, 200, "Vehicle requests fetched successfully", response);
+    return success(res, 200, vehicleRequestMessages.vehicleRequestsFetchedSuccessfully, response);
   } catch (err) {
     next(err);
   }
@@ -100,7 +103,7 @@ const listVehicleRequests = async (where, req, res, next, { viewerId } = {}) => 
 
 /** GET /api/vehicle-requests/my-requests — the L3 "Requests" tab: own requests only */
 const getMyVehicleRequests = async (req, res, next) => {
-  if (!req.employee) return error(res, 401, "Authentication required");
+  if (!req.employee) return error(res, 401, vehicleRequestMessages.authenticationRequired);
   // Raised for me + created by me for a supervisor; rows carry createdByMe / createdOnBehalf / canEdit.
   return listVehicleRequests(myRequestsScope(req.employee.id), req, res, next, { viewerId: req.employee.id });
 };
@@ -117,12 +120,12 @@ async function getAllVehicleRequests(req, res, next) {
 async function getVehicleRequestById(req, res, next) {
   try {
     const { id } = req.params;
-    if (!id) return error(res, 400, "id is required");
+    if (!id) return error(res, 400, vehicleRequestMessages.idIsRequired);
 
     const request = await VehicleRequest.findByPk(id, { include: INCLUDES });
-    if (!request) return error(res, 404, "Vehicle request not found");
+    if (!request) return error(res, 404, vehicleRequestMessages.vehicleRequestNotFound);
 
-    return success(res, 200, "Vehicle request fetched successfully", {
+    return success(res, 200, vehicleRequestMessages.vehicleRequestFetchedSuccessfully, {
       data: request,
     });
   } catch (err) {
@@ -137,7 +140,7 @@ async function getWarehousesForAllotmentVillage(req, res, next) {
   try {
     const { allotmentVillageId } = req.params;
     if (!allotmentVillageId)
-      return error(res, 400, "allotmentVillageId is required");
+      return error(res, 400, vehicleRequestMessages.allotmentVillageIdIsRequired);
 
     const av = await AllotmentVillage.findByPk(allotmentVillageId, {
       include: {
@@ -146,9 +149,9 @@ async function getWarehousesForAllotmentVillage(req, res, next) {
         attributes: ["id", "companyId"],
       },
     });
-    if (!av) return error(res, 404, "AllotmentVillage not found");
+    if (!av) return error(res, 404, vehicleRequestMessages.allotmentVillageNotFound);
     if (!av.allotment)
-      return error(res, 404, "This allotment-village has no linked allotment");
+      return error(res, 404, vehicleRequestMessages.thisAllotmentVillageHasNoLinked);
 
     const warehouses = await Warehouse.findAll({
       where: { companyId: av.allotment.companyId },
@@ -162,7 +165,7 @@ async function getWarehousesForAllotmentVillage(req, res, next) {
       order: [["createdAt", "DESC"]],
     });
 
-    return success(res, 200, "Warehouses fetched successfully", {
+    return success(res, 200, vehicleRequestMessages.warehousesFetchedSuccessfully, {
       data: warehouses,
     });
   } catch (err) {
@@ -181,7 +184,7 @@ async function getWarehousesForAllotmentVillage(req, res, next) {
  */
 async function createVehicleRequest(req, res, next) {
   try {
-    if (!req.employee) return error(res, 401, "Authentication required");
+    if (!req.employee) return error(res, 401, vehicleRequestMessages.authenticationRequired);
 
     const {
       allotmentVillageId,
@@ -193,8 +196,8 @@ async function createVehicleRequest(req, res, next) {
     } = req.body;
 
     if (!allotmentVillageId)
-      return error(res, 400, "allotmentVillageId is required");
-    if (!toWarehouseId) return error(res, 400, "toWarehouseId is required");
+      return error(res, 400, vehicleRequestMessages.allotmentVillageIdIsRequired);
+    if (!toWarehouseId) return error(res, 400, vehicleRequestMessages.toWarehouseIdIsRequired);
 
     let requestedBy = req.employee.id;
     if (onBehalfOf && Number(onBehalfOf) !== req.employee.id) {
@@ -202,12 +205,12 @@ async function createVehicleRequest(req, res, next) {
         return error(
           res,
           403,
-          "Only L1 or L2 employees can create a request on behalf of someone else",
+          vehicleRequestMessages.onlyL1OrL2EmployeesCan,
         );
       }
       const targetEmployee = await Employee.findByPk(onBehalfOf);
       if (!targetEmployee)
-        return error(res, 404, "requestedBy employee not found");
+        return error(res, 404, vehicleRequestMessages.requestedByEmployeeNotFound);
       requestedBy = Number(onBehalfOf);
     }
 
@@ -218,25 +221,25 @@ async function createVehicleRequest(req, res, next) {
         attributes: ["id", "companyId"],
       },
     });
-    if (!av) return error(res, 404, "AllotmentVillage not found");
+    if (!av) return error(res, 404, vehicleRequestMessages.allotmentVillageNotFound);
     if (av.supervisorId !== requestedBy) {
       return error(
         res,
         403,
-        `Employee ${requestedBy} is not the assigned supervisor for this allotment-village`,
+        vehicleRequestMessages.employeeIsNotTheAssignedSupervisor(requestedBy),
       );
     }
     if (av.status === "closed") {
-      return error(res, 400, "This allotment is closed — choose an open allotment");
+      return error(res, 400, vehicleRequestMessages.thisAllotmentIsClosedChooseAn);
     }
 
     const warehouse = await Warehouse.findByPk(toWarehouseId);
-    if (!warehouse) return error(res, 404, "Warehouse not found");
+    if (!warehouse) return error(res, 404, vehicleRequestMessages.warehouseNotFound);
     if (Number(warehouse.companyId) !== Number(av.allotment.companyId)) {
       return error(
         res,
         400,
-        "This warehouse does not belong to the allotment's seed company",
+        vehicleRequestMessages.thisWarehouseDoesNotBelongTo,
       );
     }
 
@@ -257,7 +260,7 @@ async function createVehicleRequest(req, res, next) {
       include: INCLUDES,
     });
 
-    return success(res, 201, "Vehicle request created successfully", {
+    return success(res, 201, vehicleRequestMessages.vehicleRequestCreatedSuccessfully, {
       data: created,
     });
   } catch (err) {
@@ -272,7 +275,7 @@ async function createVehicleRequest(req, res, next) {
 async function updateVehicleRequest(req, res, next) {
   try {
     const { id } = req.params;
-    if (!id) return error(res, 400, "id is required");
+    if (!id) return error(res, 400, vehicleRequestMessages.idIsRequired);
 
     const request = await VehicleRequest.findByPk(id, {
       include: {
@@ -281,13 +284,13 @@ async function updateVehicleRequest(req, res, next) {
         include: { model: Allotment, as: "allotment" },
       },
     });
-    if (!request) return error(res, 404, "Vehicle request not found");
+    if (!request) return error(res, 404, vehicleRequestMessages.vehicleRequestNotFound);
 
     if (request.status !== "pending") {
       return error(
         res,
         409,
-        "Vehicle requests can only be edited while Pending",
+        vehicleRequestMessages.vehicleRequestsCanOnlyBeEdited,
       );
     }
 
@@ -295,7 +298,7 @@ async function updateVehicleRequest(req, res, next) {
 
     if (toWarehouseId !== undefined) {
       const warehouse = await Warehouse.findByPk(toWarehouseId);
-      if (!warehouse) return error(res, 404, "Warehouse not found");
+      if (!warehouse) return error(res, 404, vehicleRequestMessages.warehouseNotFound);
       if (
         Number(warehouse.companyId) !==
         Number(request.allotmentVillage.allotment.companyId)
@@ -303,7 +306,7 @@ async function updateVehicleRequest(req, res, next) {
         return error(
           res,
           400,
-          "This warehouse does not belong to the allotment's seed company",
+          vehicleRequestMessages.thisWarehouseDoesNotBelongTo,
         );
       }
     }
@@ -317,7 +320,7 @@ async function updateVehicleRequest(req, res, next) {
 
     const updated = await VehicleRequest.findByPk(id, { include: INCLUDES });
 
-    return success(res, 200, "Vehicle request updated successfully", {
+    return success(res, 200, vehicleRequestMessages.vehicleRequestUpdatedSuccessfully, {
       data: updated,
     });
   } catch (err) {
@@ -328,17 +331,17 @@ async function updateVehicleRequest(req, res, next) {
 /** PUT /api/vehicle-requests/:id/mark-in-process — L1 action */
 async function markVehicleRequestInProcess(req, res, next) {
   try {
-    if (!req.employee) return error(res, 401, "Authentication required");
+    if (!req.employee) return error(res, 401, vehicleRequestMessages.authenticationRequired);
 
     const { id } = req.params;
     const request = await VehicleRequest.findByPk(id);
-    if (!request) return error(res, 404, "Vehicle request not found");
+    if (!request) return error(res, 404, vehicleRequestMessages.vehicleRequestNotFound);
 
     if (request.status !== "pending") {
       return error(
         res,
         409,
-        `Cannot mark in-process a request with status "${request.status}"`,
+        vehicleRequestMessages.cannotMarkInProcessARequest(request.status),
       );
     }
 
@@ -346,7 +349,7 @@ async function markVehicleRequestInProcess(req, res, next) {
 
     const updated = await VehicleRequest.findByPk(id, { include: INCLUDES });
 
-    return success(res, 200, "Vehicle request marked in process", {
+    return success(res, 200, vehicleRequestMessages.vehicleRequestMarkedInProcess, {
       data: updated,
     });
   } catch (err) {
@@ -363,36 +366,36 @@ async function markVehicleRequestInProcess(req, res, next) {
  */
 async function assignVehicleRequest(req, res, next) {
   try {
-    if (!req.employee) return error(res, 401, "Authentication required");
+    if (!req.employee) return error(res, 401, vehicleRequestMessages.authenticationRequired);
 
     const { id } = req.params;
     const { logisticsPartnerId, vehicleId } = req.body;
 
     if (!logisticsPartnerId)
-      return error(res, 400, "logisticsPartnerId is required");
-    if (!vehicleId) return error(res, 400, "vehicleId is required");
+      return error(res, 400, vehicleRequestMessages.logisticsPartnerIdIsRequired);
+    if (!vehicleId) return error(res, 400, vehicleRequestMessages.vehicleIdIsRequired);
 
     const request = await VehicleRequest.findByPk(id);
-    if (!request) return error(res, 404, "Vehicle request not found");
+    if (!request) return error(res, 404, vehicleRequestMessages.vehicleRequestNotFound);
 
     if (!["pending", "in_process"].includes(request.status)) {
       return error(
         res,
         409,
-        `Cannot assign a vehicle to a request with status "${request.status}"`,
+        vehicleRequestMessages.cannotAssignAVehicleToA(request.status),
       );
     }
 
     const partner = await LogisticsPartner.findByPk(logisticsPartnerId);
-    if (!partner) return error(res, 404, "Logistics partner not found");
+    if (!partner) return error(res, 404, vehicleRequestMessages.logisticsPartnerNotFound);
 
     const vehicle = await Vehicle.findByPk(vehicleId);
-    if (!vehicle) return error(res, 404, "Vehicle not found");
+    if (!vehicle) return error(res, 404, vehicleRequestMessages.vehicleNotFound);
     if (Number(vehicle.logisticsPartnerId) !== Number(logisticsPartnerId)) {
       return error(
         res,
         400,
-        "This vehicle does not belong to the selected logistics partner",
+        vehicleRequestMessages.thisVehicleDoesNotBelongTo,
       );
     }
 
@@ -405,7 +408,7 @@ async function assignVehicleRequest(req, res, next) {
 
     const updated = await VehicleRequest.findByPk(id, { include: INCLUDES });
 
-    return success(res, 200, "Vehicle assigned successfully", {
+    return success(res, 200, vehicleRequestMessages.vehicleAssignedSuccessfully, {
       data: updated,
     });
   } catch (err) {
@@ -416,17 +419,17 @@ async function assignVehicleRequest(req, res, next) {
 /** PUT /api/vehicle-requests/:id/cancel — L1 action */
 async function cancelVehicleRequest(req, res, next) {
   try {
-    if (!req.employee) return error(res, 401, "Authentication required");
+    if (!req.employee) return error(res, 401, vehicleRequestMessages.authenticationRequired);
 
     const { id } = req.params;
     const request = await VehicleRequest.findByPk(id);
-    if (!request) return error(res, 404, "Vehicle request not found");
+    if (!request) return error(res, 404, vehicleRequestMessages.vehicleRequestNotFound);
 
     if (["assigned", "cancelled"].includes(request.status)) {
       return error(
         res,
         409,
-        `Cannot cancel a request with status "${request.status}"`,
+        vehicleRequestMessages.cannotCancelARequestWithStatus(request.status),
       );
     }
 
@@ -434,7 +437,7 @@ async function cancelVehicleRequest(req, res, next) {
 
     const updated = await VehicleRequest.findByPk(id, { include: INCLUDES });
 
-    return success(res, 200, "Vehicle request cancelled", { data: updated });
+    return success(res, 200, vehicleRequestMessages.vehicleRequestCancelled, { data: updated });
   } catch (err) {
     next(err);
   }

@@ -1,5 +1,6 @@
 "use strict";
 const { Router } = require("express");
+const { logisticPartnerRoutes } = require("../constants/routes");
 const {
   getLogisticsSummary,
   getAllLogisticsPartners,
@@ -18,21 +19,21 @@ const {
 
 const router = Router();
 
-router.get("/summary", getLogisticsSummary); // KPI cards — before /:id
-router.get("/", getAllLogisticsPartners);
-router.get("/:id", getLogisticsPartnerById);
-router.get("/:id/payments", getLogisticsPartnerPayments); // Transport payments history + totals
-router.get("/:id/payments/:paymentId", getLogisticsPartnerPaymentById); // payment drawer
-router.post("/", createLogisticsPartner);
-router.put("/:id", updateLogisticsPartner);
-router.patch("/status/:logisticsId", updateLogisticsPartnerStatus);
+router.get(logisticPartnerRoutes.summary, getLogisticsSummary); // KPI cards — before /:id
+router.get(logisticPartnerRoutes.root, getAllLogisticsPartners);
+router.get(logisticPartnerRoutes.byId, getLogisticsPartnerById);
+router.get(logisticPartnerRoutes.paymentsById, getLogisticsPartnerPayments); // Transport payments history + totals
+router.get(logisticPartnerRoutes.paymentsByIdAndPaymentId, getLogisticsPartnerPaymentById); // payment drawer
+router.post(logisticPartnerRoutes.root, createLogisticsPartner);
+router.put(logisticPartnerRoutes.byId, updateLogisticsPartner);
+router.patch(logisticPartnerRoutes.statusByLogisticsId, updateLogisticsPartnerStatus);
 
 
 // Nested: vehicles belonging to this logistics partner
-router.get("/:logisticsPartnerId/vehicles", getVehiclesByLogisticsPartnerId);
-router.post("/:logisticsPartnerId/vehicles", createVehicle);
+router.get(logisticPartnerRoutes.vehiclesByLogisticsPartnerId, getVehiclesByLogisticsPartnerId);
+router.post(logisticPartnerRoutes.vehiclesByLogisticsPartnerId, createVehicle);
 
-router.put("/vehicles/:vehicleId", updateVehicle);
-router.get("/vehicles/:vehicleId", getVehicleById);
+router.put(logisticPartnerRoutes.vehiclesByVehicleId, updateVehicle);
+router.get(logisticPartnerRoutes.vehiclesByVehicleId, getVehicleById);
 
 module.exports = router;

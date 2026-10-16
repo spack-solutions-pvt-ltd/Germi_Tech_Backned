@@ -1,0 +1,47 @@
+"use strict";
+
+// Response messages for controller/employeeController.js.
+// Functions build messages that include values (counts, codes, statuses).
+const employeeMessages = {
+  employeeKpisFetchedSuccessfully: "Employee KPIs fetched successfully",
+  employeesFetchedSuccessfully: "Employees fetched successfully",
+  idIsRequired: "id is required",
+  employeeNotFound: "Employee not found",
+  employeeFetchedSuccessfully: "Employee fetched successfully",
+  nameIsRequired: "name is required",
+  numberIsRequired: "number is required",
+  levelIsRequired: "level is required",
+  roleIdIsRequired: "roleId is required",
+  roleNotFound: "Role not found",
+  anEmployeeWithThisEmailAlready: "An employee with this email already exists",
+  noEmailProvidedOnThisEmployee: "No email provided on this employee — share the password manually.",
+  employeeCreatedSuccessfully: "Employee created successfully",
+  anEmployeeWithThisNumberAlready: "An employee with this number already exists",
+  employeeUpdatedSuccessfully: "Employee updated successfully",
+  employeeIdIsRequired: "EmployeeId is required",
+  statusIsRequired: "status is required",
+  invalidStatus: "Invalid status",
+  employeeStatusUpdatedSuccessfully: "Employee status updated successfully",
+  accountHolderNameAccountNumberIfsc: "Account holder name, account number, IFSC code and bank name are required",
+  bankAccountDetailsUpdatedSuccessfully: "Bank account details updated successfully",
+  typeMustBeOneOf: (DOCUMENT_TYPES) => `type must be one of: ${DOCUMENT_TYPES}`,
+  labelIsRequiredWhenTypeIs: "label is required when type is 'other'",
+  aDocumentFileIsRequired: "A document file is required",
+  documentAddedSuccessfully: "Document added successfully",
+  documentNotFound: "Document not found",
+  documentUpdatedSuccessfully: "Document updated successfully",
+  documentFetchedSuccessfully: "Document fetched successfully",
+  employeeDocumentNotFound: "Employee document not found",
+  documentFilePathIsMissing: "Document file path is missing",
+  fileNotFoundOnServer: "File not found on server",
+  fileLinksAreNotAvailableYet: "File links are not available yet — CloudFront is not configured",
+  documentDeletedSuccessfully: "Document deleted successfully",
+  otherTypeNameIsRequiredWhenTypeIs: "otherTypeName is required when type is 'other'",
+  providerStartdateExpirydateAndAmountAre: "provider, startDate, expiryDate and amount are required",
+  insuranceAddedSuccessfully: "Insurance added successfully",
+  insuranceRecordNotFound: "Insurance record not found",
+  insuranceUpdatedSuccessfully: "Insurance updated successfully",
+  insuranceFetchedSuccessfully: "Insurance fetched successfully",
+};
+
+module.exports = { employeeMessages };

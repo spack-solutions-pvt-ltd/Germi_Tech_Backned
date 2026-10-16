@@ -1,5 +1,6 @@
 "use strict";
 const { Router } = require("express");
+const { warehouseRoutes } = require("../constants/routes");
 const {
   getWarehousesByCompanyId,
   getWarehouseById,
@@ -9,9 +10,9 @@ const {
 
 const router = Router();
 
-router.post("/", createWarehouse);
-router.put("/:warehouseId", updateWarehouse);
-router.get("/all/:seedCompanyId", getWarehousesByCompanyId);
-router.get("/:warehouseId", getWarehouseById);
+router.post(warehouseRoutes.root, createWarehouse);
+router.put(warehouseRoutes.byWarehouseId, updateWarehouse);
+router.get(warehouseRoutes.allBySeedCompanyId, getWarehousesByCompanyId);
+router.get(warehouseRoutes.byWarehouseId, getWarehouseById);
 
 module.exports = router;
